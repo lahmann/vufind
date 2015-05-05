@@ -74,7 +74,7 @@ class PAIA extends DAIA implements
         parent::init();
 
         if (!(isset($this->config['PAIA']['baseUrl']))) {
-            throw new ILSException('PAIA/URL configuration needs to be set.');
+            throw new ILSException('PAIA/baseUrl configuration needs to be set.');
         }
 
         $this->paiaURL = $this->config['PAIA']['baseUrl'];
@@ -932,7 +932,6 @@ class PAIA extends DAIA implements
             "scope" => "read_patron read_fees read_items write_items change_password"
         ];
         $login_response = $this->_postit('/auth/login', $post_data);
-
         $json_start = strpos($login_response, '{');
         $json_response = substr($login_response, $json_start);
         $array_response = json_decode($json_response, true);

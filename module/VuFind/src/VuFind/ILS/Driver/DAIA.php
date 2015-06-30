@@ -348,10 +348,15 @@ class DAIA extends AbstractBase implements
                         $this->contentTypesResponse[$this->daiaResponseFormat]
                     )
                 );
-                list($responseMediaType, $responseEncoding) = explode(
-                    ";",
-                    $result->getHeaders()->get("ContentType")->getFieldValue()
-                );
+                list($responseMediaType, $responseEncoding) = array_pad(
+                    explode(
+                        ";",
+                        $result->getHeaders()->get("ContentType")->getFieldValue(),
+                        2
+                    ),
+                    2,
+                    null
+                ); // workaround to avoid notices if encoding is not set in header
                 if (!in_array(trim($responseMediaType), $contentTypesResponse)) {
                     throw new ILSException(
                         "DAIA-ResponseFormat not supported. Received: " .
@@ -776,9 +781,12 @@ class DAIA extends AbstractBase implements
      */
     protected function getItemLocation($item)
     {
-        return array_key_exists("content", $item["storage"])
-            ? $item['storage']['content']
-            : "Unknown";
+        if (isset($item['storage'])
+            && array_key_exists('content', $item['storage'])
+        ) {
+            return $item['storage']['content'];
+        }
+        return "Unknown";
     }
 
     /**

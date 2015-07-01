@@ -100,6 +100,23 @@ class DAIA extends AbstractBase implements
     ];
 
     /**
+     * Date converter object
+     *
+     * @var \VuFind\Date\Converter
+     */
+    protected $dateConverter;
+
+    /**
+     * Constructor
+     *
+     * @param \VuFind\Date\Converter $converter Date converter
+     */
+    public function __construct(\VuFind\Date\Converter $converter)
+    {
+        $this->dateConverter = $converter;
+    }
+
+    /**
      * Initialize the driver.
      *
      * Validate configuration and perform all resource-intensive tasks needed to
@@ -687,7 +704,8 @@ class DAIA extends AbstractBase implements
                 }
                 // attribute expected is mandatory for unavailable element
                 if (isset($unavailable["expected"])) {
-                    $duedate = $unavailable["expected"];
+                    $duedate = $this->dateConverter
+                        ->convertToDisplayDate("Y-m-d", $unavailable['expected']);
                 }
 
                 // attribute queue can be set

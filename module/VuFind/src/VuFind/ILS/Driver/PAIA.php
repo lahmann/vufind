@@ -185,7 +185,7 @@ class PAIA extends DAIA implements
 
         try {
             $array_response = $this->_postAsArray(
-                '/core/'.$patron['cat_username'].'/cancel', $post_data
+                'core/'.$patron['cat_username'].'/cancel', $post_data
             );
         } catch (ILSException $e) {
             $this->debug($e->getMessage());
@@ -249,7 +249,7 @@ class PAIA extends DAIA implements
 
         try {
             $array_response = $this->_postAsArray(
-                '/auth/change', $post_data
+                'auth/change', $post_data
             );
         } catch (ILSException $e) {
             $this->debug($e->getMessage());
@@ -385,7 +385,7 @@ class PAIA extends DAIA implements
     public function getMyFines($patron)
     {
         $fees = $this->_getAsArray(
-            '/core/'.$patron['cat_username'].'/fees'
+            'core/'.$patron['cat_username'].'/fees'
         );
 
         $results = [];
@@ -730,7 +730,7 @@ class PAIA extends DAIA implements
 
         try {
             $array_response = $this->_postAsArray(
-                '/core/'.$patron['cat_username'].'/request', $post_data
+                'core/'.$patron['cat_username'].'/request', $post_data
             );
         } catch (ILSException $e) {
             $this->debug($e->getMessage());
@@ -798,7 +798,7 @@ class PAIA extends DAIA implements
 
         try {
             $array_response = $this->_postAsArray(
-                '/core/'.$patron['cat_username'].'/renew', $post_data
+                'core/'.$patron['cat_username'].'/renew', $post_data
             );
         } catch (ILSException $e) {
             $this->debug($e->getMessage());
@@ -890,7 +890,7 @@ class PAIA extends DAIA implements
     protected function getPaiaItems($patron, $status = [])
     {
         $itemsResponse = $this->_getAsArray(
-            '/core/'.$patron['cat_username'].'/items'
+            'core/'.$patron['cat_username'].'/items'
         );
 
         if (isset($itemsResponse['doc'])) {
@@ -1144,7 +1144,7 @@ class PAIA extends DAIA implements
             "grant_type" => "password",
             "scope" => "read_patron read_fees read_items write_items change_password"
         ];
-        $responseJson = $this->_postit('/auth/login', $post_data);
+        $responseJson = $this->_postit('auth/login', $post_data);
         $responseArray = $this->_parseAsArray($responseJson);
 
         if (array_key_exists('access_token', $responseArray)) {
@@ -1179,7 +1179,7 @@ class PAIA extends DAIA implements
      */
     private function _getUserDetails($patron)
     {
-        $responseJson = $this->_getit('/core/' . $patron, $_SESSION['paiaToken']);
+        $responseJson = $this->_getit('core/' . $patron, $_SESSION['paiaToken']);
 
         try {
             $responseArray = $this->_parseAsArray($responseJson);

@@ -316,6 +316,36 @@ class DAIA extends AbstractBase implements
     }
 
     /**
+     * Support method to handle date uniformly
+     *
+     * @param string $date String representing a date
+     *
+     * @return string Formatted date
+     */
+    protected function convertDate($date)
+    {
+        try {
+            return $this->dateConverter
+                ->convertToDisplayDate("Y-m-d", $date);
+        } catch (\Exception $e) {
+            $this->debug("Date conversion failed: " . $e->getMessage());
+            return '';
+        }
+    }
+
+    /**
+     * Support method to handle datetime uniformly
+     *
+     * @param string $datetime String representing a datetime
+     *
+     * @return string Formatted datetime
+     */
+    protected function convertDatetime($datetime)
+    {
+        return $this->convertDate($datetime);
+    }
+
+    /**
      * Perform an HTTP request.
      *
      * @param string $id id for query in daia
@@ -724,15 +754,8 @@ class DAIA extends AbstractBase implements
                     }
                 }
                 // attribute expected is mandatory for unavailable element
-                if (isset($unavailable["expected"])) {
-                    try {
-                        $duedate = $this->dateConverter
-                            ->convertToDisplayDate("Y-m-d", $unavailable['expected']);
-                    } catch (\Exception $e) {
-                        $this->debug("Date conversion failed: " . $e->getMessage());
-                        $duedate = null;
-                    }
-                }
+                $duedate = (isset($unavailable["expected"])
+                    ? $this->convertDate($unavailable["expected"]) : null);
 
                 // attribute queue can be set
                 if (isset($unavailable["queue"])) {

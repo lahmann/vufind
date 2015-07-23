@@ -1060,20 +1060,13 @@ class PAIA extends DAIA implements
      */
     private function _parseAsArray($file)
     {
-        //$json_start = strpos($file, '{');
-        //$responseJson = substr($file, $json_start);
         $responseArray = json_decode($file, true);
 
         if (isset($responseArray['error'])) {
-            if (isset($responseArray['error_description'])) {
                 throw new ILSException(
-                    $responseArray['error_description']
+                    $responseArray['error'],
+                    $responseArray['code']
                 );
-            } else {
-                throw new ILSException(
-                    $responseArray['error']
-                );
-            }
         }
 
         return $responseArray;
@@ -1094,9 +1087,8 @@ class PAIA extends DAIA implements
         try {
             $responseArray = $this->_parseAsArray($responseJson);
         } catch (ILSException $e) {
-            throw new ILSException(
-                $e->getMessage(), $e->getCode()
-            );
+            $this->debug($e->getCode() . ':' . $e->getMessage());
+            return [];
         }
 
         return $responseArray;
@@ -1118,9 +1110,8 @@ class PAIA extends DAIA implements
         try {
             $responseArray = $this->_parseAsArray($responseJson);
         } catch (ILSException $e) {
-            throw new ILSException(
-                $e->getMessage(), $e->getCode()
-            );
+            $this->debug($e->getCode() . ':' . $e->getMessage());
+            return [];
         }
 
         return $responseArray;
@@ -1145,7 +1136,17 @@ class PAIA extends DAIA implements
             "scope" => "read_patron read_fees read_items write_items change_password"
         ];
         $responseJson = $this->_postit('auth/login', $post_data);
-        $responseArray = $this->_parseAsArray($responseJson);
+
+        try {
+            $responseArray = $this->_parseAsArray($responseJson);
+        } catch (ILSException $e) {
+            if ($e->getMessage() === 'access_denied') {
+                return null;
+            }
+            throw new ILSException(
+                $e->getCode() . ':' . $e->getMessage()
+            );
+        }
 
         if (array_key_exists('access_token', $responseArray)) {
             $_SESSION['paiaToken'] = $responseArray['access_token'];
@@ -1159,10 +1160,6 @@ class PAIA extends DAIA implements
                     'Login credentials accepted, but got no patron ID?!?'
                 );
             }
-        } else if (array_key_exists('error', $responseArray)) {
-            throw new ILSException(
-                $responseArray['error'].": ".$responseArray['error_description']
-            );
         } else {
             throw new ILSException('Unknown error! Access denied.');
         }

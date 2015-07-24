@@ -184,7 +184,7 @@ class PAIA extends DAIA implements
         $post_data = ["doc" => $items];
 
         try {
-            $array_response = $this->_postAsArray(
+            $array_response = $this->paiaPostAsArray(
                 'core/'.$patron['cat_username'].'/cancel', $post_data
             );
         } catch (ILSException $e) {
@@ -248,7 +248,7 @@ class PAIA extends DAIA implements
             "new_password" => $newPassword];
 
         try {
-            $array_response = $this->_postAsArray(
+            $array_response = $this->paiaPostAsArray(
                 'auth/change', $post_data
             );
         } catch (ILSException $e) {
@@ -384,7 +384,7 @@ class PAIA extends DAIA implements
      */
     public function getMyFines($patron)
     {
-        $fees = $this->_getAsArray(
+        $fees = $this->paiaGetAsArray(
             'core/'.$patron['cat_username'].'/fees'
         );
 
@@ -422,79 +422,16 @@ class PAIA extends DAIA implements
      */
     public function getMyHolds($patron)
     {
-        // valid status for getMyTransactions are:
-        // 1 - reserved (the document is not accessible for the patron yet, but it
-        //     will be)
-        // 2 - ordered (the document is being made accessible for the patron)
-        // 4 - provided (the document is ready to be used by the patron)
-        $status = [1, 2, 4];
-        // get items-docs for given status
-        $items = $this->getPaiaItems($patron, $status);
-        $results = [];
+        // filters for getMyHolds are:
+        // status = 1 - reserved (the document is not accessible for the patron yet,
+        //              but it will be)
+        //          2 - ordered (the document is being made accessible for the patron)
+        //          4 - provided (the document is ready to be used by the patron)
+        $filter = ['status' => [1, 2, 4]];
+        // get items-docs for given filters
+        $items = $this->paiaGetItems($patron, $filter);
 
-        foreach ($items as $doc) {
-            $result = [];
-
-            // item (0..1) URI of a particular copy
-            $result['item_id'] = (isset($doc['item']) ? $doc['item'] : '');
-
-            $result['cancel_details']
-                = (isset($result['cancancel']) && $result['cancancel'])
-                ? $result['item_id'] : '';
-
-            // edition (0..1) URI of a the document (no particular copy)
-            // hook for retrieving alternative ItemId in case PAIA does not
-            // the needed id
-            $result['id'] = (isset($doc['edition'])
-                ? $this->getAlternativeItemId($doc['edition']) : '');
-
-            $result['type'] = $this->getStatusString($doc['status']);
-
-            $result['location'] = (isset($doc['location'])
-                ? $doc['location'] : null);
-
-            // queue (0..1) number of waiting requests for the document or item
-            $result['position'] =  (isset($doc['queue']) ? $doc['queue'] : null);
-
-            // only true if status == 4
-            $result['available'] = false;
-
-            // about (0..1) textual description of the document
-            $result['title'] = (isset($doc['about']) ? $doc['about'] : null);
-
-            if (in_array($doc['status'], [1, 2])) {
-                // status == 1 => starttime: when the document was reserved
-                // status == 2 => starttime: when the document was ordered
-                $result['create'] = (isset($doc['starttime'])
-                    ? $this->convertDatetime($doc['starttime']) : '');
-            }
-
-            if ($doc['status'] == '4') {
-                // status == 4 => endtime: when the provision will expire
-                $result['expire'] = (isset($doc['endtime'])
-                    ? $this->convertDatetime($doc['endtime']) : '');
-                // status: provided (the document is ready to be used by the
-                // patron)
-                $result['available'] = true;
-            }
-
-            /*
-            $result['reqnum'] = null;
-            $result['volume'] =  null;
-            $result['publication_year'] = null;
-            $result['isbn'] = null;
-            $result['issn'] = null;
-            $result['oclc'] = null;
-            $result['upc'] = null;
-            */
-
-            //'message'        => $loans_response['doc'][$i]['label'],
-            //'callnumber'     => $loans_response['doc'][$i]['label'],
-
-            $results[] = $result;
-
-        }
-        return $results;
+        return $this->mapPaiaItems($items, 'myHoldsMapping');
     }
 
     /**
@@ -537,86 +474,13 @@ class PAIA extends DAIA implements
      */
     public function getMyTransactions($patron)
     {
-        // valid status for getMyTransactions are:
-        // 3 - held (the document is on loan by the patron)
-        $status = [3];
-        // get items-docs for given status
-        $items = $this->getPaiaItems($patron, $status);
-        $results = [];
+        // filters for getMyTransactions are:
+        // status = 3 - held (the document is on loan by the patron)
+        $filter = ['status' => [3]];
+        // get items-docs for given filters
+        $items = $this->paiaGetItems($patron, $filter);
 
-        foreach ($items as $doc) {
-            $result = [];
-            // canrenew (0..1) whether a document can be renewed (bool)
-            $result['renewable'] = (isset($doc['canrenew'])
-                ? $doc['canrenew'] : true);
-
-            // item (0..1) URI of a particular copy
-            $result['item_id'] = (isset($doc['item']) ? $doc['item'] : '');
-
-            $result['renew_details']
-                = (isset($result['canrenew']) && $result['canrenew'])
-                ? $result['item_id'] : '';
-
-            // edition (0..1)  URI of a the document (no particular copy)
-            // hook for retrieving alternative ItemId in case PAIA does not
-            // the needed id
-            $result['id'] = (isset($doc['edition'])
-                ? $this->getAlternativeItemId($doc['edition']) : '');
-
-            // requested (0..1) URI that was originally requested
-
-            // about (0..1) textual description of the document
-            $result['title'] = (isset($doc['about']) ? $doc['about'] : null);
-
-            // label (0..1) call number, shelf mark or similar item label
-            $result['barcode'] = (isset($doc['label']) ? $doc['label'] : null);
-
-            // queue (0..1) number of waiting requests for the document or item
-            $result['request'] = (isset($doc['queue']) ? $doc['queue'] : null);
-
-            // renewals (0..1) number of times the document has been renewed
-            $result['renew'] = (isset($doc['renewals']) ? $doc['renewals'] : null);
-
-            // reminder (0..1) number of times the patron has been reminded
-            $reminder = (isset($doc['reminder']) ? $doc['reminder'] : null);
-
-            // starttime (0..1) date and time when the status began
-
-            // endtime (0..1) date and time when the status will expire
-            $result['dueTime'] = (isset($doc['endtime'])
-                ? $this->convertDatetime($doc['endtime']) : '');
-
-            // duedate (0..1) date when the current status will expire (deprecated)
-            $result['duedate'] = (isset($doc['duedate'])
-                ? $this->convertDate($doc['duedate']) : '');
-
-            // cancancel (0..1) whether an ordered or provided document can be canceled
-
-            // error (0..1) error message, for instance if a request was rejected
-            $result['message'] = (isset($doc['error']) ? $doc['error'] : '');
-
-            // storage (0..1) location of the document
-            $result['institution_name'] = (isset($doc['storage'])
-                ? $doc['storage'] : '');
-
-            // storageid (0..1) location URI
-
-            /*
-            $result['dueStatus'] = null;
-            $result['renewLimit'] = "1";
-            $result['volume'] = null;
-            $result['publication_year'] = null;
-            $result['isbn'] = null;
-            $result['issn'] = null;
-            $result['oclc'] = null;
-            $result['upc'] = null;
-            $result['borrowingLocation'] = null;
-            */
-
-            $results[] = $result;
-        }
-
-        return $results;
+        return $this->mapPaiaItems($items, 'myTransactionsMapping');
     }
 
     /**
@@ -700,7 +564,7 @@ class PAIA extends DAIA implements
         $this->_password = $password;
 
         try {
-            return $this->_paiaLogin($username, $password);
+            return $this->paiaLogin($username, $password);
         } catch (ILSException $e) {
             throw new ILSException($e->getMessage());
         }
@@ -729,7 +593,7 @@ class PAIA extends DAIA implements
         $post_data = ["doc" => $items];
 
         try {
-            $array_response = $this->_postAsArray(
+            $array_response = $this->paiaPostAsArray(
                 'core/'.$patron['cat_username'].'/request', $post_data
             );
         } catch (ILSException $e) {
@@ -797,7 +661,7 @@ class PAIA extends DAIA implements
         $post_data = ["doc" => $items];
 
         try {
-            $array_response = $this->_postAsArray(
+            $array_response = $this->paiaPostAsArray(
                 'core/'.$patron['cat_username'].'/renew', $post_data
             );
         } catch (ILSException $e) {
@@ -870,7 +734,7 @@ class PAIA extends DAIA implements
      *
      * @return string Describing PAIA service status
      */
-    protected function getStatusString($status)
+    protected function paiaStatusString($status)
     {
         if (isset($statusStrings[$status])) {
             return $statusStrings[$status];
@@ -883,27 +747,33 @@ class PAIA extends DAIA implements
      * documents containing the given service status.
      *
      * @param array $patron Array with patron information
-     * @param array $status Array of relevant service status
+     * @param array $filter Array of properties identifying the wanted items
      *
-     * @return array|mixed Array of documents containing the given service status
+     * @return array|mixed Array of documents containing the given filter properties
      */
-    protected function getPaiaItems($patron, $status = [])
+    protected function paiaGetItems($patron, $filter = [])
     {
-        $itemsResponse = $this->_getAsArray(
+        $itemsResponse = $this->paiaGetAsArray(
             'core/'.$patron['cat_username'].'/items'
         );
 
         if (isset($itemsResponse['doc'])) {
-            if (count($status)) {
-                $statusItems = [];
+            if (count($filter)) {
+                $filteredItems = [];
                 foreach ($itemsResponse['doc'] as $doc) {
-                    if (isset($doc['status'])
-                        && in_array($doc['status'], $status)
-                    ) {
-                        $statusItems[] = $doc;
+                    $filterCounter = 0;
+                    foreach ($filter as $filterKey => $filterValue) {
+                        if (isset($doc[$filterKey])
+                            && in_array($doc[$filterKey], (array)$filterValue)
+                        ) {
+                            $filterCounter++;
+                        }
+                    }
+                    if ($filterCounter == count($filter)) {
+                        $filteredItems[] = $doc;
                     }
                 }
-                return $statusItems;
+                return $filteredItems;
             } else {
                 return $itemsResponse;
             }
@@ -937,7 +807,7 @@ class PAIA extends DAIA implements
      *
      * @return array
      */
-    protected function parseUserDetails($patron, $user_response)
+    protected function paiaParseUserDetails($patron, $user_response)
     {
         $username = $user_response['name'];
         if (count(explode(',', $username)) == 2) {
@@ -969,6 +839,189 @@ class PAIA extends DAIA implements
         return $user;
     }
 
+    /**
+     * PAIA helper function to allow customization of mapping from PAIA response to
+     * VuFind ILS-method return values.
+     *
+     * @param array  $items   Array of PAIA items to be mapped
+     * @param string $mapping String identifying a custom mapping-method
+     *
+     * @return array
+     */
+    protected function mapPaiaItems($items, $mapping)
+    {
+        if (is_callable([$this, $mapping])) {
+            return $this->$mapping($items);
+        }
+
+        $this->debug('Could not call method: ' . $mapping . '() .');
+        return [];
+    }
+
+    /**
+     * This PAIA helper function allows custom overrides for mapping of PAIA response
+     * to getMyHolds data structure.
+     *
+     * @param array $items Array of PAIA items to be mapped.
+     *
+     * @return array
+     */
+    protected function myHoldsMapping($items)
+    {
+        $results = [];
+
+        foreach ($items as $doc) {
+            $result = [];
+
+            // item (0..1) URI of a particular copy
+            $result['item_id'] = (isset($doc['item']) ? $doc['item'] : '');
+
+            $result['cancel_details']
+                = (isset($result['cancancel']) && $result['cancancel'])
+                ? $result['item_id'] : '';
+
+            // edition (0..1) URI of a the document (no particular copy)
+            // hook for retrieving alternative ItemId in case PAIA does not
+            // the needed id
+            $result['id'] = (isset($doc['edition'])
+                ? $this->getAlternativeItemId($doc['edition']) : '');
+
+            $result['type'] = $this->paiaStatusString($doc['status']);
+
+            $result['location'] = (isset($doc['location'])
+                ? $doc['location'] : null);
+
+            // queue (0..1) number of waiting requests for the document or item
+            $result['position'] =  (isset($doc['queue']) ? $doc['queue'] : null);
+
+            // only true if status == 4
+            $result['available'] = false;
+
+            // about (0..1) textual description of the document
+            $result['title'] = (isset($doc['about']) ? $doc['about'] : null);
+
+            if (in_array($doc['status'], [1, 2])) {
+                // status == 1 => starttime: when the document was reserved
+                // status == 2 => starttime: when the document was ordered
+                $result['create'] = (isset($doc['starttime'])
+                    ? $this->convertDatetime($doc['starttime']) : '');
+            }
+
+            if ($doc['status'] == '4') {
+                // status == 4 => endtime: when the provision will expire
+                $result['expire'] = (isset($doc['endtime'])
+                    ? $this->convertDatetime($doc['endtime']) : '');
+                // status: provided (the document is ready to be used by the
+                // patron)
+                $result['available'] = true;
+            }
+
+            /*
+            $result['reqnum'] = null;
+            $result['volume'] =  null;
+            $result['publication_year'] = null;
+            $result['isbn'] = null;
+            $result['issn'] = null;
+            $result['oclc'] = null;
+            $result['upc'] = null;
+            */
+
+            //'message'        => $loans_response['doc'][$i]['label'],
+            //'callnumber'     => $loans_response['doc'][$i]['label'],
+
+            $results[] = $result;
+
+        }
+        return $results;
+    }
+
+    /**
+     * This PAIA helper function allows custom overrides for mapping of PAIA response
+     * to getMyTransactions data structure.
+     *
+     * @param array $items Array of PAIA items to be mapped.
+     *
+     * @return array
+     */
+    protected function myTransactionsMapping($items)
+    {
+        $results = [];
+
+        foreach ($items as $doc) {
+            $result = [];
+            // canrenew (0..1) whether a document can be renewed (bool)
+            $result['renewable'] = (isset($doc['canrenew'])
+                ? $doc['canrenew'] : true);
+
+            // item (0..1) URI of a particular copy
+            $result['item_id'] = (isset($doc['item']) ? $doc['item'] : '');
+
+            $result['renew_details']
+                = (isset($result['canrenew']) && $result['canrenew'])
+                ? $result['item_id'] : '';
+
+            // edition (0..1)  URI of a the document (no particular copy)
+            // hook for retrieving alternative ItemId in case PAIA does not
+            // the needed id
+            $result['id'] = (isset($doc['edition'])
+                ? $this->getAlternativeItemId($doc['edition']) : '');
+
+            // requested (0..1) URI that was originally requested
+
+            // about (0..1) textual description of the document
+            $result['title'] = (isset($doc['about']) ? $doc['about'] : null);
+
+            // label (0..1) call number, shelf mark or similar item label
+            $result['barcode'] = (isset($doc['label']) ? $doc['label'] : null);
+
+            // queue (0..1) number of waiting requests for the document or item
+            $result['request'] = (isset($doc['queue']) ? $doc['queue'] : null);
+
+            // renewals (0..1) number of times the document has been renewed
+            $result['renew'] = (isset($doc['renewals']) ? $doc['renewals'] : null);
+
+            // reminder (0..1) number of times the patron has been reminded
+            $reminder = (isset($doc['reminder']) ? $doc['reminder'] : null);
+
+            // starttime (0..1) date and time when the status began
+
+            // endtime (0..1) date and time when the status will expire
+            $result['dueTime'] = (isset($doc['endtime'])
+                ? $this->convertDatetime($doc['endtime']) : '');
+
+            // duedate (0..1) date when the current status will expire (deprecated)
+            $result['duedate'] = (isset($doc['duedate'])
+                ? $this->convertDate($doc['duedate']) : '');
+
+            // cancancel (0..1) whether an ordered or provided document can be canceled
+
+            // error (0..1) error message, for instance if a request was rejected
+            $result['message'] = (isset($doc['error']) ? $doc['error'] : '');
+
+            // storage (0..1) location of the document
+            $result['institution_name'] = (isset($doc['storage'])
+                ? $doc['storage'] : '');
+
+            // storageid (0..1) location URI
+
+            /*
+            $result['dueStatus'] = null;
+            $result['renewLimit'] = "1";
+            $result['volume'] = null;
+            $result['publication_year'] = null;
+            $result['isbn'] = null;
+            $result['issn'] = null;
+            $result['oclc'] = null;
+            $result['upc'] = null;
+            $result['borrowingLocation'] = null;
+            */
+
+            $results[] = $result;
+        }
+
+        return $results;
+    }
+
     // private functions to connect to PAIA
 
     /**
@@ -981,7 +1034,7 @@ class PAIA extends DAIA implements
      * @return string POST response
      * @throws ILSException
      */
-    private function _postit($file, $data_to_send, $access_token = null)
+    protected function paiaPostRequest($file, $data_to_send, $access_token = null)
     {
         // json-encoding
         $postData = stripslashes(json_encode($data_to_send));
@@ -1023,7 +1076,7 @@ class PAIA extends DAIA implements
      * @return bool|string
      * @throws ILSException
      */
-    private function _getit($file, $access_token)
+    protected function paiaGetRequest($file, $access_token)
     {
         $http_headers = [
             'Authorization' => 'Bearer ' .$access_token,
@@ -1058,7 +1111,7 @@ class PAIA extends DAIA implements
      * @return mixed
      * @throws ILSException
      */
-    private function _parseAsArray($file)
+    protected function paiaParseJsonAsArray($file)
     {
         $responseArray = json_decode($file, true);
 
@@ -1080,12 +1133,12 @@ class PAIA extends DAIA implements
      * @return array|mixed
      * @throws ILSException
      */
-    private function _getAsArray($file)
+    protected function paiaGetAsArray($file)
     {
-        $responseJson = $this->_getit($file, $_SESSION['paiaToken']);
+        $responseJson = $this->paiaGetRequest($file, $_SESSION['paiaToken']);
 
         try {
-            $responseArray = $this->_parseAsArray($responseJson);
+            $responseArray = $this->paiaParseJsonAsArray($responseJson);
         } catch (ILSException $e) {
             $this->debug($e->getCode() . ':' . $e->getMessage());
             return [];
@@ -1103,12 +1156,12 @@ class PAIA extends DAIA implements
      * @return array|mixed
      * @throws ILSException
      */
-    private function _postAsArray($file, $data)
+    protected function paiaPostAsArray($file, $data)
     {
-        $responseJson = $this->_postit($file, $data, $_SESSION['paiaToken']);
+        $responseJson = $this->paiaPostRequest($file, $data, $_SESSION['paiaToken']);
 
         try {
-            $responseArray = $this->_parseAsArray($responseJson);
+            $responseArray = $this->paiaParseJsonAsArray($responseJson);
         } catch (ILSException $e) {
             $this->debug($e->getCode() . ':' . $e->getMessage());
             return [];
@@ -1127,7 +1180,7 @@ class PAIA extends DAIA implements
      * null on unsuccessful login, PEAR_Error on error.
      * @throws ILSException
      */
-    private function _paiaLogin($username, $password)
+    protected function paiaLogin($username, $password)
     {
         $post_data = [
             "username" => $username,
@@ -1135,10 +1188,10 @@ class PAIA extends DAIA implements
             "grant_type" => "password",
             "scope" => "read_patron read_fees read_items write_items change_password"
         ];
-        $responseJson = $this->_postit('auth/login', $post_data);
+        $responseJson = $this->paiaPostRequest('auth/login', $post_data);
 
         try {
-            $responseArray = $this->_parseAsArray($responseJson);
+            $responseArray = $this->paiaParseJsonAsArray($responseJson);
         } catch (ILSException $e) {
             if ($e->getMessage() === 'access_denied') {
                 return null;
@@ -1151,7 +1204,7 @@ class PAIA extends DAIA implements
         if (array_key_exists('access_token', $responseArray)) {
             $_SESSION['paiaToken'] = $responseArray['access_token'];
             if (array_key_exists('patron', $responseArray)) {
-                $patron = $this->_getUserDetails($responseArray['patron']);
+                $patron = $this->paiaGetUserDetails($responseArray['patron']);
                 $patron['cat_username'] = $responseArray['patron'];
                 $patron['cat_password'] = $password;
                 return $patron;
@@ -1166,7 +1219,7 @@ class PAIA extends DAIA implements
     }
 
     /**
-     * Support method for _paiaLogin() -- load user details into session and return
+     * Support method for paiaLogin() -- load user details into session and return
      * array of basic user data.
      *
      * @param array $patron patron ID
@@ -1174,19 +1227,21 @@ class PAIA extends DAIA implements
      * @return array
      * @throws ILSException
      */
-    private function _getUserDetails($patron)
+    protected function paiaGetUserDetails($patron)
     {
-        $responseJson = $this->_getit('core/' . $patron, $_SESSION['paiaToken']);
+        $responseJson = $this->paiaGetRequest(
+            'core/' . $patron, $_SESSION['paiaToken']
+        );
 
         try {
-            $responseArray = $this->_parseAsArray($responseJson);
+            $responseArray = $this->paiaParseJsonAsArray($responseJson);
         } catch (ILSException $e) {
             throw new ILSException(
                 $e->getMessage(), $e->getCode()
             );
         }
 
-        return $this->parseUserDetails($patron, $responseArray);
+        return $this->paiaParseUserDetails($patron, $responseArray);
     }
 
 }

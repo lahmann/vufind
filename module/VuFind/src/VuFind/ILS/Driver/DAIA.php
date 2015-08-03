@@ -759,8 +759,15 @@ class DAIA extends AbstractBase implements
                     }
                 }
                 // attribute expected is mandatory for unavailable element
-                $duedate = (isset($unavailable["expected"])
-                    ? $this->convertDate($unavailable["expected"]) : null);
+                if (isset($unavailable["expected"])) {
+                    try {
+                        $duedate = $this->dateConverter
+                            ->convertToDisplayDate("Y-m-d", $unavailable['expected']);
+                    } catch (\Exception $e) {
+                        $this->debug("Date conversion failed: " . $e->getMessage());
+                        $duedate = null;
+                    }
+                }
 
                 // attribute queue can be set
                 if (isset($unavailable["queue"])) {

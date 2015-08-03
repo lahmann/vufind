@@ -520,6 +520,11 @@ class DAIA extends AbstractBase implements
         }
 
         if (count($docs)) {
+            // check for error messages and write those to log
+            if (array_key_exists("message", $docs)) {
+                $this->logMessages($docs["message"], "document");
+            }
+
             // do DAIA documents exist?
             if (array_key_exists("document", $docs) && $this->multiQuery) {
                 // now loop through the found DAIA documents
@@ -852,6 +857,10 @@ class DAIA extends AbstractBase implements
             && array_key_exists('content', $item['storage'])
         ) {
             return $item['storage']['content'];
+        } elseif (isset($item['department'])
+            && array_key_exists('content', $item['department'])
+        ) {
+            return $item['department']['content'];
         }
         return "Unknown";
     }

@@ -352,8 +352,8 @@ class PAIA extends DAIA implements
     public function getHolding($id, array $patron = null)
     {
         // only patron-specific behaviour in VuFind2.4 is for "addLink" which is not
-        // supported by PAIA, so return DAIA::getStatus
-        return parent::getStatus($id);
+        // supported by PAIA, so return DAIA::getHolding
+        return parent::getHolding($id, $patron);
     }
 
     /**

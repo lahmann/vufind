@@ -901,13 +901,20 @@ class DAIA extends AbstractBase implements
      */
     protected function logMessages($messages, $context)
     {
-        foreach ($messages as $message) {
-            if (isset($message['content'])) {
-                $this->debug(
-                    "Message in DAIA response (" . (string) $context . "): " .
-                    $message['content']
-                );
-            }
-        }
+		if (isset($messages['content'])) {
+			$this->debug(
+				"Message in DAIA response (" . (string) $context . "): " .
+				$messages['content']
+			);		
+		} else {
+			foreach ($messages as $message) {
+				if (isset($message['content'])) {
+					$this->debug(
+						"Message in DAIA response (" . (string) $context . "): " .
+						$message['content']
+					);
+				}
+			}
+		}
     }
 }

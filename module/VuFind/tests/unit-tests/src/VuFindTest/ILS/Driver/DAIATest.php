@@ -45,7 +45,6 @@ use InvalidArgumentException;
  */
 class DAIATest extends \VuFindTest\Unit\ILSDriverTestCase
 {
-
     protected $testResult = [
         0 =>
             [
@@ -61,6 +60,7 @@ class DAIATest extends \VuFindTest\Unit\ILSDriverTestCase
                 'reserve' => "N",
                 'callnumber' => "ABC 12",
                 'location' => "Abteilung III",
+                'locationhref' => false
             ],
         1 =>
             [
@@ -76,6 +76,7 @@ class DAIATest extends \VuFindTest\Unit\ILSDriverTestCase
                 'reserve' => "N",
                 'callnumber' => "DEF 34",
                 'location' => "Abteilung III",
+                'locationhref' => false
             ],
         2 =>
             [
@@ -91,6 +92,7 @@ class DAIATest extends \VuFindTest\Unit\ILSDriverTestCase
                 'reserve' => "N",
                 'callnumber' => "GHI 56",
                 'location' => "Abteilung III",
+                'locationhref' => false
             ],
     ];
 
@@ -124,7 +126,6 @@ class DAIATest extends \VuFindTest\Unit\ILSDriverTestCase
         $result = $conn->getStatus('027586081');
 
         // exact result for using the DAIA.php with testfile daia.json
-
 
         $this->assertEquals($result, $this->testResult);
     }

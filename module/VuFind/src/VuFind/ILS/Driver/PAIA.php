@@ -233,19 +233,18 @@ class PAIA extends DAIA implements
      * Public Function which changes the password in the library system
      * (not supported prior to VuFind 2.4)
      *
-     * @param array  $patron      Array with patron information.
-     * @param string $oldPassword Old Password.
-     * @param string $newPassword New Password.
+     * @param array  $details Array with patron information, newPassword and oldPassword.
      *
      * @return array An array with patron information.
      */
-    public function changePassword($patron, $oldPassword, $newPassword)
+    public function changePassword($details)
     {
         $post_data = [
-            "patron"       => $patron['username'],
-            "username"     => $patron['firstname']." ".$patron['lastname'],
-            "old_password" => $oldPassword,
-            "new_password" => $newPassword];
+            "patron"       => $details['patron']['cat_username'],
+            "username"     => $details['patron']['cat_username'],
+            "old_password" => $details['oldPassword'],
+            "new_password" => $details['newPassword']
+        ];
 
         try {
             $array_response = $this->paiaPostAsArray(
@@ -261,26 +260,29 @@ class PAIA extends DAIA implements
 
         $details = [];
 
-        if (array_key_exists('error', $array_response)) {
+        if (isset($array_response['error'])) {
+            // on error
             $details = [
-                'success' => false,
-                'status' => $array_response['error'],
-                'sysMessage' => $array_response['error_description']
+                'success'    => false,
+                'status'     => $array_response['error'],
+                'sysMessage' =>
+                    isset($array_response['error'])
+                        ? $array_response['error'] : ' ' .
+                    isset($array_response['error_description'])
+                        ? $array_response['error_description'] : ' '
+            ];
+        } elseif ($array_response === $post_data['patron']) {
+            // on success patron_id is returned
+            $details = [
+                'success' => true,
+                'status' => 'Successfully changed'
             ];
         } else {
-            $element = $array_response['patron'];
-            if (array_key_exists('error', $element)) {
                 $details = [
                     'success' => false,
                     'status' => 'Failure changing password',
-                    'sysMessage' => $element['error']
+                'sysMessage' => serialize($array_response)
                 ];
-            } else {
-                $details = [
-                    'success' => true,
-                    'status' => 'Successfully changed'
-                ];
-            }
         }
         return $details;
     }

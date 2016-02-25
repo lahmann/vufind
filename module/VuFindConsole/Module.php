@@ -86,9 +86,12 @@ class Module implements \Zend\ModuleManager\Feature\ConsoleUsageProviderInterfac
             'harvest merge-marc' => 'MARC merge tool',
             'import import-xsl' => 'XSLT importer',
             'import webcrawl' => 'Web crawler',
+            'language addusingtemplate' => 'Build new language strings from '
+                . 'existing ones using a template',
             'language copystring' => 'Copy one language string to another',
             'language delete' => 'Remove a language string from all files',
             'language normalize' => 'Normalize a directory of language files',
+            'util cleanup_record_cache' => 'Remove unused records from the cache',
             'util commit' => 'Solr commit tool',
             'util createHierarchyTrees' => 'Cache populator for hierarchies',
             'util cssBuilder' => 'LESS compiler',

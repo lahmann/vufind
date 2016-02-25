@@ -33,7 +33,8 @@
 namespace VuFind\ILS\Driver;
 use VuFind\Exception\ILS as ILSException,
     VuFindHttp\HttpServiceAwareInterface as HttpServiceAwareInterface,
-    Zend\Log\LoggerAwareInterface as LoggerAwareInterface;
+    Zend\Log\LoggerAwareInterface as LoggerAwareInterface,
+    Zend\Session\Container as SessionContainer;
 
 /**
  * PAIA ILS Driver for VuFind to get patron information
@@ -56,12 +57,25 @@ class PAIA extends DAIA implements
     use \VuFindHttp\HttpServiceAwareTrait;
     use \VuFind\Log\LoggerAwareTrait;
 
-    private $_username;
-    private $_password;
-
-    protected $baseURL;
+    /**
+     * URL of PAIA service
+     *
+     * @var
+     */
     protected $paiaURL;
 
+    /**
+     * Session containing PAIA login information
+     *
+     * @var Zend\Session\Container
+     */
+    protected $session;
+
+    /**
+     * PAIA status strings
+     *
+     * @var array
+     */
     protected static $statusStrings = [
         '0' => 'no relation',
         '1' => 'reserved',
@@ -72,10 +86,13 @@ class PAIA extends DAIA implements
     ];
 
     /**
-     * Constructor
+     * Initialize the driver.
      *
-     * @return void
+     * Validate configuration and perform all resource-intensive tasks needed to
+     * make the driver active.
+     *
      * @throws ILSException
+     * @return void
      */
     public function init()
     {
@@ -84,74 +101,75 @@ class PAIA extends DAIA implements
         if (!(isset($this->config['PAIA']['baseUrl']))) {
             throw new ILSException('PAIA/baseUrl configuration needs to be set.');
         }
-
         $this->paiaURL = $this->config['PAIA']['baseUrl'];
 
+        $this->session = new SessionContainer('PAIA');
     }
 
     // public functions implemented to satisfy Driver Interface
 
     /*
     -- = previously implemented
-    +-- = modified implementation
+    +- = modified implementation
     ?? = unclear if necessary for PAIA
     !! = not necessary for PAIA
     DD = implemented in DAIA
+    CC = should be implemented/customized for individual needs
 
     VuFind2 ILS-Driver methods:
 
-    -- cancelHolds
-    -- changePassword
-    checkRequestIsValid
-    findReserves
-    -- getCancelHoldDetails
-    !!getCancelHoldLink
-    DD getConfig
-    ?? getConsortialHoldings
-    ?? getCourses
-    -- getDefaultPickUpLocation
-    ?? getDepartments
-    -- getFunds
-    ?? getHoldDefaultRequiredDate
-    +-- getHolding
-    -- getHoldLink todo: re/move to DAIA as PAIA should support placeHold in any case
-    ?? getInstructors
-    +-- getMyFines
-    +-- getMyHolds
-    +-- getMyProfile
-    +-- getMyTransactions
-    +-- getNewItems
-    !! getOfflineMode
-    -- getPickUpLocations
-    DD getPurchaseHistory
-    -- getRenewDetails
-    DD getStatus
-    DD getStatuses
-    ?? getSuppressedAuthorityRecords
-    ?? getSuppressedRecords
-    !! hasHoldings
-    -- init
-    !! loginIsHidden
-    -- patronLogin
-    +-- placeHold
-    +-- renewMyItems
-    !! renewMyItemsLink
-    DD setConfig
-    !! supportsMethod
+    -- - cancelHolds
+    +- - changePassword
+    CC - checkRequestIsValid
+    !! - findReserves
+    -- - getCancelHoldDetails
+    !! - getCancelHoldLink
+    DD - getConfig
+    !! - getConsortialHoldings
+    !! - getCourses
+    -- - getDefaultPickUpLocation
+    !! - getDepartments
+    -- - getFunds
+    ?? - getHoldDefaultRequiredDate
+    +- - getHolding
+    +- - getHoldLink  // should be customized for individual needs via getILSHoldLink
+    !! - getInstructors
+    +- - getMyFines
+    +- - getMyHolds
+    +- - getMyProfile
+    +- - getMyTransactions
+    +- - getNewItems
+    !! - getOfflineMode
+    -- - getPickUpLocations // should be customized for individual needs
+    DD - getPurchaseHistory
+    -- - getRenewDetails
+    DD - getStatus
+    DD - getStatuses
+    !! - getSuppressedAuthorityRecords
+    !! - getSuppressedRecords
+    !! - hasHoldings
+    -- - init
+    !! - loginIsHidden
+    +- - patronLogin
+    +- - placeHold
+    +- - renewMyItems
+    !! - renewMyItemsLink
+    DD - setConfig
+    !! - supportsMethod
 
-    getMyStorageRetrievalRequests
-    checkStorageRetrievalRequestIsValid
-    placeStorageRetrievalRequest
-    cancelStorageRetrievalRequests
-    getCancelStorageRetrievalRequestDetails
+    CC - getMyStorageRetrievalRequests
+    CC - checkStorageRetrievalRequestIsValid
+    CC - placeStorageRetrievalRequest
+    CC - cancelStorageRetrievalRequests
+    CC - getCancelStorageRetrievalRequestDetails
 
-    getMyILLRequests
-    checkILLRequestIsValid
-    getILLPickupLibraries
-    getILLPickupLocations
-    placeILLRequest
-    cancelILLRequests
-    getCancelILLRequestDetails
+    CC - getMyILLRequests
+    CC - checkILLRequestIsValid
+    CC - getILLPickupLibraries
+    CC - getILLPickupLocations
+    CC - placeILLRequest
+    CC - cancelILLRequests
+    CC - getCancelILLRequestDetails
     */
 
     /**
@@ -233,7 +251,8 @@ class PAIA extends DAIA implements
      * Public Function which changes the password in the library system
      * (not supported prior to VuFind 2.4)
      *
-     * @param array  $details Array with patron information, newPassword and oldPassword.
+     * @param array $details Array with patron information, newPassword and
+     *                       oldPassword.
      *
      * @return array An array with patron information.
      */
@@ -278,11 +297,11 @@ class PAIA extends DAIA implements
                 'status' => 'Successfully changed'
             ];
         } else {
-                $details = [
-                    'success' => false,
-                    'status' => 'Failure changing password',
+            $details = [
+                'success' => false,
+                'status' => 'Failure changing password',
                 'sysMessage' => serialize($array_response)
-                ];
+            ];
         }
         return $details;
     }
@@ -408,7 +427,8 @@ class PAIA extends DAIA implements
                     // fee.amount 	1..1 	money 	amount of a single fee
                     'amount'      => $feeConverter($fee['amount']),
                     'checkout'    => '',
-                    // fee.feetype 	0..1 	string 	textual description of the type of service that caused the fee
+                    // fee.feetype 	0..1 	string 	textual description of the type
+                    // of service that caused the fee
                     'fine'    => (isset($fee['feetype']) ? $fee['feetype'] : null),
                     'balance' => $feeConverter($fee['amount']),
                     // fee.date 	0..1 	date 	date when the fee was claimed
@@ -421,7 +441,8 @@ class PAIA extends DAIA implements
                     // custom PAIA fields
                     // fee.about 	0..1 	string 	textual information about the fee
                     // fee.item 	0..1 	URI 	item that caused the fee
-                    // fee.feeid 	0..1 	URI 	URI of the type of service that caused the fee
+                    // fee.feeid 	0..1 	URI 	URI of the type of service that
+                    // caused the fee
                 ];
             }
         }
@@ -442,7 +463,8 @@ class PAIA extends DAIA implements
         // filters for getMyHolds are:
         // status = 1 - reserved (the document is not accessible for the patron yet,
         //              but it will be)
-        //          2 - ordered (the document is being made accessible for the patron)
+        //          2 - ordered (the document is being made accessible for the
+        //              patron)
         //          4 - provided (the document is ready to be used by the patron)
         $filter = ['status' => [1, 2, 4]];
         // get items-docs for given filters
@@ -577,11 +599,33 @@ class PAIA extends DAIA implements
         if ($username == '' || $password == '') {
             throw new ILSException('Invalid Login, Please try again.');
         }
-        $this->_username = $username;
-        $this->_password = $password;
+
+        $enrichUserDetails = function ($details, $password) {
+            $details['cat_username'] = $this->session->patron;
+            $details['cat_password'] = $password;
+            return $details;
+        };
+
+        // if we already have a session with access_token and patron id, try to get
+        // patron info with session data
+        if (isset($this->session->expires) && $this->session->expires > time()) {
+            try {
+                return $enrichUserDetails(
+                    $this->paiaGetUserDetails($this->session->patron),
+                    $password
+                );
+            } catch (ILSException $e) {
+                $this->debug('Session expired, login again', 'info');
+            }
+        }
 
         try {
-            return $this->paiaLogin($username, $password);
+            if ($this->paiaLogin($username, $password)) {
+                return $enrichUserDetails(
+                    $this->paiaGetUserDetails($this->session->patron),
+                    $password
+                );
+            }
         } catch (ILSException $e) {
             throw new ILSException($e->getMessage());
         }
@@ -809,7 +853,6 @@ class PAIA extends DAIA implements
      * @param string $id itemId
      *
      * @return string $id
-     * @access private
      */
     protected function getAlternativeItemId($id)
     {
@@ -917,6 +960,9 @@ class PAIA extends DAIA implements
             // about (0..1) textual description of the document
             $result['title'] = (isset($doc['about']) ? $doc['about'] : null);
 
+            // label (0..1) call number, shelf mark or similar item label
+            $result['callnumber'] = (isset($doc['label']) ? $doc['label'] : null); // PAIA custom field
+
             if (in_array($doc['status'], [1, 2])) {
                 // status == 1 => starttime: when the document was reserved
                 // status == 2 => starttime: when the document was ordered
@@ -933,6 +979,7 @@ class PAIA extends DAIA implements
                 $result['available'] = true;
             }
 
+            // Optional VuFind fields
             /*
             $result['reqnum'] = null;
             $result['volume'] =  null;
@@ -942,9 +989,6 @@ class PAIA extends DAIA implements
             $result['oclc'] = null;
             $result['upc'] = null;
             */
-
-            //'message'        => $loans_response['doc'][$i]['label'],
-            //'callnumber'     => $loans_response['doc'][$i]['label'],
 
             $results[] = $result;
 
@@ -988,9 +1032,6 @@ class PAIA extends DAIA implements
             // about (0..1) textual description of the document
             $result['title'] = (isset($doc['about']) ? $doc['about'] : null);
 
-            // label (0..1) call number, shelf mark or similar item label
-            $result['barcode'] = (isset($doc['label']) ? $doc['label'] : null);
-
             // queue (0..1) number of waiting requests for the document or item
             $result['request'] = (isset($doc['queue']) ? $doc['queue'] : null);
 
@@ -1010,7 +1051,8 @@ class PAIA extends DAIA implements
             $result['duedate'] = (isset($doc['duedate'])
                 ? $this->convertDate($doc['duedate']) : '');
 
-            // cancancel (0..1) whether an ordered or provided document can be canceled
+            // cancancel (0..1) whether an ordered or provided document can be
+            // canceled
 
             // error (0..1) error message, for instance if a request was rejected
             $result['message'] = (isset($doc['error']) ? $doc['error'] : '');
@@ -1021,7 +1063,12 @@ class PAIA extends DAIA implements
 
             // storageid (0..1) location URI
 
+            // label (0..1) call number, shelf mark or similar item label
+            $result['callnumber'] = (isset($doc['label']) ? $doc['label'] : null); // PAIA custom field
+
+            // Optional VuFind fields
             /*
+            $result['barcode'] = null;
             $result['dueStatus'] = null;
             $result['renewLimit'] = "1";
             $result['volume'] = null;
@@ -1038,8 +1085,6 @@ class PAIA extends DAIA implements
 
         return $results;
     }
-
-    // private functions to connect to PAIA
 
     /**
      * Post something to a foreign host
@@ -1121,7 +1166,7 @@ class PAIA extends DAIA implements
     }
 
     /**
-     * Private helper function for PAIA to uniformely parse JSON
+     * Helper function for PAIA to uniformely parse JSON
      *
      * @param string $file JSON data
      *
@@ -1133,10 +1178,10 @@ class PAIA extends DAIA implements
         $responseArray = json_decode($file, true);
 
         if (isset($responseArray['error'])) {
-                throw new ILSException(
-                    $responseArray['error'],
-                    $responseArray['code']
-                );
+            throw new ILSException(
+                $responseArray['error'],
+                $responseArray['code']
+            );
         }
 
         return $responseArray;
@@ -1152,7 +1197,10 @@ class PAIA extends DAIA implements
      */
     protected function paiaGetAsArray($file)
     {
-        $responseJson = $this->paiaGetRequest($file, $_SESSION['paiaToken']);
+        $responseJson = $this->paiaGetRequest(
+            $file,
+            $this->session->access_token
+        );
 
         try {
             $responseArray = $this->paiaParseJsonAsArray($responseJson);
@@ -1175,7 +1223,11 @@ class PAIA extends DAIA implements
      */
     protected function paiaPostAsArray($file, $data)
     {
-        $responseJson = $this->paiaPostRequest($file, $data, $_SESSION['paiaToken']);
+        $responseJson = $this->paiaPostRequest(
+            $file,
+            $data,
+            $this->session->access_token
+        );
 
         try {
             $responseArray = $this->paiaParseJsonAsArray($responseJson);
@@ -1188,7 +1240,7 @@ class PAIA extends DAIA implements
     }
 
     /**
-     * Private authentication function - use PAIA for authentication
+     * PAIA authentication function
      *
      * @param string $username Username
      * @param string $password Password
@@ -1199,11 +1251,13 @@ class PAIA extends DAIA implements
      */
     protected function paiaLogin($username, $password)
     {
+        // perform full PAIA auth and get patron info
         $post_data = [
-            "username" => $username,
-            "password" => $password,
+            "username"   => $username,
+            "password"   => $password,
             "grant_type" => "password",
-            "scope" => "read_patron read_fees read_items write_items change_password"
+            "scope"      => "read_patron read_fees read_items write_items " .
+                            "change_password"
         ];
         $responseJson = $this->paiaPostRequest('auth/login', $post_data);
 
@@ -1211,27 +1265,38 @@ class PAIA extends DAIA implements
             $responseArray = $this->paiaParseJsonAsArray($responseJson);
         } catch (ILSException $e) {
             if ($e->getMessage() === 'access_denied') {
-                return null;
+                return false;
             }
             throw new ILSException(
                 $e->getCode() . ':' . $e->getMessage()
             );
         }
 
-        if (array_key_exists('access_token', $responseArray)) {
-            $_SESSION['paiaToken'] = $responseArray['access_token'];
-            if (array_key_exists('patron', $responseArray)) {
-                $patron = $this->paiaGetUserDetails($responseArray['patron']);
-                $patron['cat_username'] = $responseArray['patron'];
-                $patron['cat_password'] = $password;
-                return $patron;
-            } else {
-                throw new ILSException(
-                    'Login credentials accepted, but got no patron ID?!?'
-                );
-            }
+        if (!isset($responseArray['access_token'])) {
+            throw new ILSException(
+                'Unknown error! Access denied.'
+            );
+        } elseif (!isset($responseArray['patron'])) {
+            throw new ILSException(
+                'Login credentials accepted, but got no patron ID?!?'
+            );
         } else {
-            throw new ILSException('Unknown error! Access denied.');
+            // at least access_token and patron got returned which is sufficient for
+            // us, now save all to session
+            $this->session->patron
+                = isset($responseArray['patron'])
+                    ? $responseArray['patron'] : null;
+            $this->session->access_token
+                = isset($responseArray['access_token'])
+                    ? $responseArray['access_token'] : null;
+            $this->session->scope
+                = isset($responseArray['scope'])
+                    ? explode(' ', $responseArray['scope']) : null;
+            $this->session->expires
+                = isset($responseArray['expires_in'])
+                    ? (time() + ($responseArray['expires_in'])) : null;
+
+            return true;
         }
     }
 
@@ -1247,7 +1312,7 @@ class PAIA extends DAIA implements
     protected function paiaGetUserDetails($patron)
     {
         $responseJson = $this->paiaGetRequest(
-            'core/' . $patron, $_SESSION['paiaToken']
+            'core/' . $patron, $this->session->access_token
         );
 
         try {

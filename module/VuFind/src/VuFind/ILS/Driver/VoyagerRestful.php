@@ -432,6 +432,7 @@ class VoyagerRestful extends Voyager implements \VuFindHttp\HttpServiceAwareInte
      */
     protected function isStorageRetrievalRequestAllowed($holdingsRow)
     {
+        $holdingsRow = $holdingsRow['_fullRow'];
         if (!isset($holdingsRow['TEMP_ITEM_TYPE_ID'])
             || !isset($holdingsRow['ITEM_TYPE_ID'])
         ) {
@@ -439,7 +440,6 @@ class VoyagerRestful extends Voyager implements \VuFindHttp\HttpServiceAwareInte
             return false;
         }
 
-        $holdingsRow = $holdingsRow['_fullRow'];
         if (isset($this->config['StorageRetrievalRequests']['valid_item_types'])) {
             $validTypes = explode(
                 ':', $this->config['StorageRetrievalRequests']['valid_item_types']
@@ -533,21 +533,23 @@ class VoyagerRestful extends Voyager implements \VuFindHttp\HttpServiceAwareInte
             $holdType = '';
             $storageRetrieval = '';
 
-            // Hold Type - If we have patron data, we can use it to determine if a
-            // hold link should be shown
-            if ($patron && $this->holdsMode == "driver") {
-                // This limit is set as the api is slow to return results
-                if ($i < $this->holdCheckLimit && $this->holdCheckLimit != "0") {
-                    $holdType = $this->determineHoldType(
-                        $patron['id'], $row['id'], $row['item_id']
-                    );
-                    $addLink = $holdType ? $holdType : false;
+            if ($is_holdable) {
+                // Hold Type - If we have patron data, we can use it to determine if
+                // a hold link should be shown
+                if ($patron && $this->holdsMode == "driver") {
+                    // This limit is set as the api is slow to return results
+                    if ($i < $this->holdCheckLimit && $this->holdCheckLimit != "0") {
+                        $holdType = $this->determineHoldType(
+                            $patron['id'], $row['id'], $row['item_id']
+                        );
+                        $addLink = $holdType ? $holdType : false;
+                    } else {
+                        $holdType = "auto";
+                        $addLink = "check";
+                    }
                 } else {
                     $holdType = "auto";
-                    $addLink = "check";
                 }
-            } else {
-                $holdType = "auto";
             }
 
             if ($isStorageRetrievalRequestAllowed) {
@@ -770,6 +772,32 @@ class VoyagerRestful extends Voyager implements \VuFindHttp\HttpServiceAwareInte
                 ];
             }
         }
+
+        // Do we need to sort pickup locations? If the setting is false, don't
+        // bother doing any more work. If it's not set at all, default to
+        // alphabetical order.
+        $orderSetting = isset($this->config['Holds']['pickUpLocationOrder'])
+            ? $this->config['Holds']['pickUpLocationOrder'] : 'default';
+        if (count($pickResponse) > 1 && !empty($orderSetting)) {
+            $locationOrder = $orderSetting === 'default'
+                ? [] : array_flip(explode(':', $orderSetting));
+            $sortFunction = function ($a, $b) use ($locationOrder) {
+                $aLoc = $a['locationID'];
+                $bLoc = $b['locationID'];
+                if (isset($locationOrder[$aLoc])) {
+                    if (isset($locationOrder[$bLoc])) {
+                        return $locationOrder[$aLoc] - $locationOrder[$bLoc];
+                    }
+                    return -1;
+                }
+                if (isset($locationOrder[$bLoc])) {
+                    return 1;
+                }
+                return strcasecmp($a['locationDisplay'], $b['locationDisplay']);
+            };
+            usort($pickResponse, $sortFunction);
+        }
+
         return $pickResponse;
     }
 
@@ -1013,7 +1041,7 @@ class VoyagerRestful extends Voyager implements \VuFindHttp\HttpServiceAwareInte
             $sqlStmt = $this->db->prepare($sql['string']);
             $sqlStmt->execute($sql['bind']);
         } catch (PDOException $e) {
-            return new PEAR_Error($e->getMessage());
+            throw new ILSException($e->getMessage());
         }
 
         $groups = [];
@@ -2988,7 +3016,7 @@ EOT;
             if ($message->attributes()->type == 'success') {
                 return [
                     'success' => true,
-                    'status' => 'ill_request_success'
+                    'status' => 'ill_request_place_success'
                 ];
             }
             if ($message->attributes()->type == 'system') {

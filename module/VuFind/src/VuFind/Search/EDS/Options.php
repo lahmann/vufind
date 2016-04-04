@@ -102,13 +102,6 @@ class Options extends \VuFind\Search\Base\Options
     protected $commonExpanders = [];
 
     /**
-     * Pre-assigned filters
-     *
-     * @var array
-     */
-    protected $hiddenFilters = [];
-
-    /**
      * Constructor
      *
      * @param \VuFind\Config\PluginManager $configLoader Configuration loader
@@ -120,7 +113,8 @@ class Options extends \VuFind\Search\Base\Options
         $this->searchIni = $this->facetsIni = 'EDS';
         $searchSettings = $configLoader->get($this->searchIni);
         parent::__construct($configLoader);
-        $this->resultLimit = 100;
+        // 2015-06-30 RF - Changed to unlimited
+        //$this->resultLimit = 100;
         $this->viewOptions = [
             'list|title' => 'Title View', 'list|brief' => 'Brief View',
             'list|detailed' => 'Detailed View'
@@ -132,9 +126,9 @@ class Options extends \VuFind\Search\Base\Options
         if (isset($facetConf->Advanced_Facet_Settings->translated_facets)
             && count($facetConf->Advanced_Facet_Settings->translated_facets) > 0
         ) {
-            foreach ($facetConf->Advanced_Facet_Settings->translated_facets as $c) {
-                $this->translatedFacets[] = $c;
-            }
+            $this->setTranslatedFacets(
+                $facetConf->Advanced_Facet_Settings->translated_facets->toArray()
+            );
         }
     }
 
@@ -646,28 +640,6 @@ class Options extends \VuFind\Search\Base\Options
     {
         $viewArr = explode('|', $this->defaultView);
         return $viewArr[0];
-    }
-
-    /**
-     * Add a hidden (i.e. not visible in facet controls) filter query to the object.
-     *
-     * @param string $fq Filter query for Solr.
-     *
-     * @return void
-     */
-    public function addHiddenFilter($fq)
-    {
-        $this->hiddenFilters[] = $fq;
-    }
-
-    /**
-     * Get an array of hidden filters.
-     *
-     * @return array
-     */
-    public function getHiddenFilters()
-    {
-        return $this->hiddenFilters;
     }
 
     /**

@@ -45,8 +45,8 @@ trait StorageRetrievalRequestsTrait
      */
     public function blockedStorageRetrievalRequestAction()
     {
-        $this->flashMessenger()->setNamespace('error')
-            ->addMessage('storage_retrieval_request_error_blocked');
+        $this->flashMessenger()
+            ->addMessage('storage_retrieval_request_error_blocked', 'error');
         return $this->redirectToRecord('#top');
     }
 
@@ -112,24 +112,25 @@ trait StorageRetrievalRequestsTrait
 
             // Success: Go to Display Storage Retrieval Requests
             if (isset($results['success']) && $results['success'] == true) {
-                $this->flashMessenger()->setNamespace('success')
-                    ->addMessage('storage_retrieval_request_place_success');
-                if ($this->inLightbox()) {
-                    return false;
-                }
-                return $this->redirect()->toRoute(
-                    'myresearch-storageretrievalrequests'
-                );
+                $msg = [
+                    'html' => true,
+                    'msg' => 'storage_retrieval_request_place_success_html',
+                    'tokens' => [
+                        '%%url%%' => $this->url()
+                            ->fromRoute('myresearch-storageretrievalrequests')
+                    ],
+                ];
+                $this->flashMessenger()->addMessage($msg, 'success');
+                return $this->redirectToRecord('#top');
             } else {
                 // Failure: use flash messenger to display messages, stay on
                 // the current form.
                 if (isset($results['status'])) {
-                    $this->flashMessenger()->setNamespace('error')
-                        ->addMessage($results['status']);
+                    $this->flashMessenger()->addMessage($results['status'], 'error');
                 }
                 if (isset($results['sysMessage'])) {
-                    $this->flashMessenger()->setNamespace('error')
-                        ->addMessage($results['sysMessage']);
+                    $this->flashMessenger()
+                        ->addMessage($results['sysMessage'], 'error');
                 }
             }
         }

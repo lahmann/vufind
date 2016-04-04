@@ -313,7 +313,7 @@ class Record extends AbstractHelper
     public function getTitleHtml($maxLength = 180)
     {
         $highlightedTitle = $this->driver->tryMethod('getHighlightedTitle');
-        $title = $this->driver->tryMethod('getTitle');
+        $title = trim($this->driver->tryMethod('getTitle'));
         if (!empty($highlightedTitle)) {
             $highlight = $this->getView()->plugin('highlight');
             $addEllipsis = $this->getView()->plugin('addEllipsis');
@@ -337,13 +337,13 @@ class Record extends AbstractHelper
     {
         // Figure out controller using naming convention based on resource
         // source:
-        $source = $this->driver->getResourceSource();
-        if ($source == 'VuFind') {
-            // "VuFind" is special case -- it refers to Solr, which uses
-            // the basic record controller.
+        $source = $this->driver->getSourceIdentifier();
+        if ($source == DEFAULT_SEARCH_BACKEND) {
+            // Default source is special case -- it uses the basic record
+            // controller.
             return 'Record';
         }
-        // All non-Solr controllers will correspond with the record source:
+        // All other controllers will correspond with the record source:
         return ucwords(strtolower($source)) . 'record';
     }
 
@@ -412,7 +412,7 @@ class Record extends AbstractHelper
     public function getCheckbox($idPrefix = '')
     {
         static $checkboxCount = 0;
-        $id = $this->driver->getResourceSource() . '|'
+        $id = $this->driver->getSourceIdentifier() . '|'
             . $this->driver->getUniqueId();
         $context
             = ['id' => $id, 'count' => $checkboxCount++, 'prefix' => $idPrefix];
@@ -553,13 +553,15 @@ class Record extends AbstractHelper
      * Get all the links associated with this record.  Returns an array of
      * associative arrays each containing 'desc' and 'url' keys.
      *
+     * @param bool $openUrlActive Is there an active OpenURL on the page?
+     *
      * @return array
      */
-    public function getLinkDetails()
+    public function getLinkDetails($openUrlActive = false)
     {
         // See if there are any links available:
         $urls = $this->driver->tryMethod('getURLs');
-        if (empty($urls)) {
+        if (empty($urls) || ($openUrlActive && $this->hasOpenUrlReplaceSetting())) {
             return [];
         }
 
@@ -606,15 +608,11 @@ class Record extends AbstractHelper
      * replace_other_urls.  Returns an array of associative arrays each containing
      * 'desc' and 'url' keys.
      *
-     * @return array
+     * @return bool
      */
-    public function getLinkDetailsForOpenUrl()
+    protected function hasOpenUrlReplaceSetting()
     {
-        if (isset($this->config->OpenURL->replace_other_urls)
-            && $this->config->OpenURL->replace_other_urls
-        ) {
-            return [];
-        }
-        return $this->getLinkDetails();
+        return isset($this->config->OpenURL->replace_other_urls)
+            && $this->config->OpenURL->replace_other_urls;
     }
 }

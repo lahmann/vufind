@@ -126,9 +126,13 @@ class Params extends \VuFind\Search\Base\Params
     public function getFilterSettings()
     {
         // Define Filter Query
-        $filterQuery = $this->getOptions()->getHiddenFilters();
+        $filterQuery = [];
         $orFilters = [];
-        foreach ($this->filterList as $field => $filter) {
+        $filterList = array_merge(
+            $this->getHiddenFilters(),
+            $this->filterList
+        );
+        foreach ($filterList as $field => $filter) {
             if ($orFacet = (substr($field, 0, 1) == '~')) {
                 $field = substr($field, 1);
             }
@@ -188,15 +192,7 @@ class Params extends \VuFind\Search\Base\Params
             if ($this->facetPrefix != null) {
                 $facetSet['prefix'] = $this->facetPrefix;
             }
-            if ($this->facetSort != null) {
-                $facetSet['sort'] = $this->facetSort;
-            } else {
-                // No explicit setting? Set one based on the documented Solr behavior
-                // (index order for limit = -1, count order for limit > 0)
-                // Later Solr versions may have different defaults than earlier ones,
-                // so making this explicit ensures consistent behavior.
-                $facetSet['sort'] = ($this->facetLimit > 0) ? 'count' : 'index';
-            }
+            $facetSet['sort'] = $this->facetSort ?: 'count';
             if ($this->indexSortedFacets != null) {
                 foreach ($this->indexSortedFacets as $field) {
                     $facetSet["f.{$field}.facet.sort"] = 'index';
@@ -386,14 +382,6 @@ class Params extends \VuFind\Search\Base\Params
         case 0:
             $this->addFilter('illustrated:"Not Illustrated"');
             break;
-        }
-
-        // Check for hidden filters:
-        $hidden = $request->get('hiddenFilters');
-        if (!empty($hidden) && is_array($hidden)) {
-            foreach ($hidden as $current) {
-                $this->getOptions()->addHiddenFilter($current);
-            }
         }
     }
 
@@ -619,6 +607,14 @@ class Params extends \VuFind\Search\Base\Params
             $filter['displayText'] = $facetHelper->formatDisplayText(
                 $filter['displayText'], true, $separator
             );
+            if ($translate) {
+                $domain = $this->getOptions()->getTextDomainForTranslatedFacet(
+                    $field
+                );
+                $filter['displayText'] = $this->translate(
+                    [$domain, $filter['displayText']]
+                );
+            }
         }
 
         return $filter;

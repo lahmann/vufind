@@ -57,6 +57,20 @@ class Factory
     }
 
     /**
+     * Construct the AccountCapabilities helper.
+     *
+     * @param ServiceManager $sm Service manager.
+     *
+     * @return AccountCapabilities
+     */
+    public static function getAccountCapabilities(ServiceManager $sm)
+    {
+        return new AccountCapabilities(
+            $sm->getServiceLocator()->get('VuFind\AccountCapabilities')
+        );
+    }
+
+    /**
      * Construct the AlphaBrowse helper.
      *
      * @param ServiceManager $sm Service manager.
@@ -221,20 +235,6 @@ class Factory
             ? $config->Piwik->custom_variables
             : false;
         return new Piwik($url, $siteId, $customVars);
-    }
-
-    /**
-     * Construct the GetLastSearchLink helper.
-     *
-     * @param ServiceManager $sm Service manager.
-     *
-     * @return GetLastSearchLink
-     */
-    public static function getGetLastSearchLink(ServiceManager $sm)
-    {
-        return new GetLastSearchLink(
-            $sm->getServiceLocator()->get('VuFind\Search\Memory')
-        );
     }
 
     /**
@@ -430,6 +430,20 @@ class Factory
     }
 
     /**
+     * Construct the SearchMemory helper.
+     *
+     * @param ServiceManager $sm Service manager.
+     *
+     * @return SearchMemory
+     */
+    public static function getSearchMemory(ServiceManager $sm)
+    {
+        return new SearchMemory(
+            $sm->getServiceLocator()->get('VuFind\Search\Memory')
+        );
+    }
+
+    /**
      * Construct the SearchOptions helper.
      *
      * @param ServiceManager $sm Service manager.
@@ -466,12 +480,9 @@ class Factory
      */
     public static function getSearchTabs(ServiceManager $sm)
     {
-        $config = $sm->getServiceLocator()->get('VuFind\Config')->get('config');
-        $config = isset($config->SearchTabs)
-            ? $config->SearchTabs->toArray() : [];
         return new SearchTabs(
             $sm->getServiceLocator()->get('VuFind\SearchResultsPluginManager'),
-            $config, $sm->get('url')
+            $sm->get('url'), $sm->getServiceLocator()->get('VuFind\SearchTabsHelper')
         );
     }
 
@@ -514,17 +525,8 @@ class Factory
      */
     public static function getUserList(ServiceManager $sm)
     {
-        $cfg = $sm->getServiceLocator()->get('VuFind\Config')->get('config');
-        $setting = isset($cfg->Social->lists)
-            ? trim(strtolower($cfg->Social->lists)) : 'enabled';
-        if (!$setting) {
-            $setting = 'disabled';
-        }
-        $whitelist = ['enabled', 'disabled', 'public_only', 'private_only'];
-        if (!in_array($setting, $whitelist)) {
-            $setting = 'enabled';
-        }
-        return new UserList($setting);
+        $capabilities = $sm->getServiceLocator()->get('VuFind\AccountCapabilities');
+        return new UserList($capabilities->getListSetting());
     }
 
     /**
@@ -536,10 +538,7 @@ class Factory
      */
     public static function getUserTags(ServiceManager $sm)
     {
-        $cfg = $sm->getServiceLocator()->get('VuFind\Config')->get('config');
-        $mode = !isset($cfg->Social->tags)
-            || ($cfg->Social->tags && $cfg->Social->tags !== 'disabled')
-            ? 'enabled' : 'disabled';
-        return new UserTags($mode);
+        $capabilities = $sm->getServiceLocator()->get('VuFind\AccountCapabilities');
+        return new UserTags($capabilities->getTagSetting());
     }
 }

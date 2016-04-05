@@ -27,14 +27,11 @@
  * @author   Till Kinstler <kinstler@gbv.de>
  * @author   André Lahmann <lahmann@ub.uni-leipzig.de>
  * @license  http://opensource.org/licenses/gpl-2.0.php GNU General Public License
- * @link     http://vufind.org/wiki/building_an_ils_driver Wiki
+ * @link     https://vufind.org/wiki/development:plugins:ils_drivers Wiki
  */
 
 namespace VuFind\ILS\Driver;
-use VuFind\Exception\ILS as ILSException,
-    VuFindHttp\HttpServiceAwareInterface as HttpServiceAwareInterface,
-    Zend\Log\LoggerAwareInterface as LoggerAwareInterface,
-    Zend\Session\Container as SessionContainer;
+use VuFind\Exception\ILS as ILSException;
 
 /**
  * PAIA ILS Driver for VuFind to get patron information
@@ -49,14 +46,10 @@ use VuFind\Exception\ILS as ILSException,
  * @author   Till Kinstler <kinstler@gbv.de>
  * @author   André Lahmann <lahmann@ub.uni-leipzig.de>
  * @license  http://opensource.org/licenses/gpl-2.0.php GNU General Public License
- * @link     http://vufind.org/wiki/building_an_ils_driver Wiki
+ * @link     https://vufind.org/wiki/development:plugins:ils_drivers Wiki
  */
-class PAIA extends DAIA implements
-    HttpServiceAwareInterface, LoggerAwareInterface
+class PAIA extends DAIA
 {
-    use \VuFindHttp\HttpServiceAwareTrait;
-    use \VuFind\Log\LoggerAwareTrait;
-
     /**
      * URL of PAIA service
      *
@@ -72,6 +65,13 @@ class PAIA extends DAIA implements
     protected $session;
 
     /**
+     * SessionManager
+     *
+     * @var \VuFind\SessionManager
+     */
+    protected $sessionManager;
+
+    /**
      * PAIA status strings
      *
      * @var array
@@ -84,6 +84,31 @@ class PAIA extends DAIA implements
         '4' => 'provided',
         '5' => 'rejected',
     ];
+
+    /**
+     * Constructor
+     *
+     * @param \VuFind\Date\Converter $converter Date converter
+     */
+    public function __construct(\VuFind\Date\Converter $converter, \Zend\Session\SessionManager $sessionManager)
+    {
+        parent::__construct($converter);
+        $this->sessionManager = $sessionManager;
+    }
+
+    /**
+     * Get the session container (constructing it on demand if not already present)
+     *
+     * @return SessionContainer
+     */
+    protected function getSession()
+    {
+        // SessionContainer not defined yet? Build it now:
+        if (null === $this->session) {
+            $this->session = new \Zend\Session\Container('PAIA', $this->sessionManager);
+        }
+        return $this->session;
+    }
 
     /**
      * Initialize the driver.
@@ -103,7 +128,6 @@ class PAIA extends DAIA implements
         }
         $this->paiaURL = $this->config['PAIA']['baseUrl'];
 
-        $this->session = new SessionContainer('PAIA');
     }
 
     // public functions implemented to satisfy Driver Interface
@@ -600,18 +624,20 @@ class PAIA extends DAIA implements
             throw new ILSException('Invalid Login, Please try again.');
         }
 
-        $enrichUserDetails = function ($details, $password) {
-            $details['cat_username'] = $this->session->patron;
+        $session = $this->getSession();
+
+        $enrichUserDetails = function ($details, $password) use ($session) {
+            $details['cat_username'] = $session->patron;
             $details['cat_password'] = $password;
             return $details;
         };
 
         // if we already have a session with access_token and patron id, try to get
         // patron info with session data
-        if (isset($this->session->expires) && $this->session->expires > time()) {
+        if (isset($session->expires) && $session->expires > time()) {
             try {
                 return $enrichUserDetails(
-                    $this->paiaGetUserDetails($this->session->patron),
+                    $this->paiaGetUserDetails($session->patron),
                     $password
                 );
             } catch (ILSException $e) {
@@ -622,7 +648,7 @@ class PAIA extends DAIA implements
         try {
             if ($this->paiaLogin($username, $password)) {
                 return $enrichUserDetails(
-                    $this->paiaGetUserDetails($this->session->patron),
+                    $this->paiaGetUserDetails($session->patron),
                     $password
                 );
             }
@@ -1042,8 +1068,6 @@ class PAIA extends DAIA implements
             $reminder = (isset($doc['reminder']) ? $doc['reminder'] : null);
 
             // starttime (0..1) date and time when the status began
-            $result['startTime'] = (isset($doc['starttime'])
-                ? $this->convertDatetime($doc['starttime']) : '');
 
             // endtime (0..1) date and time when the status will expire
             $result['dueTime'] = (isset($doc['endtime'])
@@ -1201,7 +1225,7 @@ class PAIA extends DAIA implements
     {
         $responseJson = $this->paiaGetRequest(
             $file,
-            $this->session->access_token
+            $this->getSession()->access_token
         );
 
         try {
@@ -1228,7 +1252,7 @@ class PAIA extends DAIA implements
         $responseJson = $this->paiaPostRequest(
             $file,
             $data,
-            $this->session->access_token
+            $this->getSession()->access_token
         );
 
         try {
@@ -1259,7 +1283,7 @@ class PAIA extends DAIA implements
             "password"   => $password,
             "grant_type" => "password",
             "scope"      => "read_patron read_fees read_items write_items " .
-                            "change_password"
+                "change_password"
         ];
         $responseJson = $this->paiaPostRequest('auth/login', $post_data);
 
@@ -1285,18 +1309,20 @@ class PAIA extends DAIA implements
         } else {
             // at least access_token and patron got returned which is sufficient for
             // us, now save all to session
-            $this->session->patron
+            $session = $this->getSession();
+
+            $session->patron
                 = isset($responseArray['patron'])
-                    ? $responseArray['patron'] : null;
-            $this->session->access_token
+                ? $responseArray['patron'] : null;
+            $session->access_token
                 = isset($responseArray['access_token'])
-                    ? $responseArray['access_token'] : null;
-            $this->session->scope
+                ? $responseArray['access_token'] : null;
+            $session->scope
                 = isset($responseArray['scope'])
-                    ? explode(' ', $responseArray['scope']) : null;
-            $this->session->expires
+                ? explode(' ', $responseArray['scope']) : null;
+            $session->expires
                 = isset($responseArray['expires_in'])
-                    ? (time() + ($responseArray['expires_in'])) : null;
+                ? (time() + ($responseArray['expires_in'])) : null;
 
             return true;
         }
@@ -1314,7 +1340,7 @@ class PAIA extends DAIA implements
     protected function paiaGetUserDetails($patron)
     {
         $responseJson = $this->paiaGetRequest(
-            'core/' . $patron, $this->session->access_token
+            'core/' . $patron, $this->getSession()->access_token
         );
 
         try {
@@ -1324,7 +1350,6 @@ class PAIA extends DAIA implements
                 $e->getMessage(), $e->getCode()
             );
         }
-
         return $this->paiaParseUserDetails($patron, $responseArray);
     }
 

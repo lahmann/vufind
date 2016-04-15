@@ -128,6 +128,15 @@ class PAIA extends DAIA
         }
         $this->paiaURL = $this->config['PAIA']['baseUrl'];
 
+        $this->config['cancelHolds'] = [];
+        $this->config['Holds'] = ['HMACKeys' => 'id:item_id', 'extraHoldFields' => 'item_id', 'defaultRequiredDate' => '', 'consortium' => false];
+        $this->config['Renewals'] = [];
+        $this->config['cancelStorageRetrievalRequests'] = [];
+        $this->config['storageRetrievalRequests'] = ['HMACKeys' => 'id:item_id', 'extraFields' => 'item_id', 'defaultRequiredDate' => '', 'helpText' => 'What is this?', 'helpText[de]' => 'Wat n dat?'];
+        $this->config['cancelILLRequests'] = [];
+        $this->config['ILLRequests'] = ['HMACKeys' => 'id', 'extraFields' => '', 'defaultRequiredDate' => '', 'helpText' => 'What is this?', 'helpText[de]' => 'Wat n dat?'];
+        $this->config['changePassword'] = [];
+
     }
 
     // public functions implemented to satisfy Driver Interface
@@ -398,7 +407,11 @@ class PAIA extends DAIA
     {
         // only patron-specific behaviour in VuFind2.4 is for "addLink" which is not
         // supported by PAIA, so return DAIA::getHolding
-        return parent::getHolding($id, $patron);
+        $holding = parent::getHolding($id, $patron);
+        // add PAIA specific things
+        $holding['mytest'] = 'test';
+        $holding['addStorageRetrievalRequestLink'] = 'auto';
+        return $holding;
     }
 
     /**
@@ -467,6 +480,8 @@ class PAIA extends DAIA
                     // fee.item 	0..1 	URI 	item that caused the fee
                     // fee.feeid 	0..1 	URI 	URI of the type of service that
                     // caused the fee
+                    // fee.feetypeid 	0..1 	URI 	URI of the type of service that
+                    // caused the fee
                 ];
             }
         }
@@ -509,17 +524,20 @@ class PAIA extends DAIA
     public function getMyProfile($patron)
     {
         //todo: read VCard if avaiable in patron info
+        //todo: make fields more configurable
         if (is_array($patron)) {
             return [
-                'firstname' => $patron['firstname'],
-                'lastname'  => $patron['lastname'],
-                'address1'  => null,
-                'address2'  => null,
-                'city'      => null,
-                'country'   => null,
-                'zip'       => null,
-                'phone'     => null,
-                'group'     => null,
+                'firstname'  => $patron['firstname'],
+                'lastname'   => $patron['lastname'],
+                'address1'   => null,
+                'address2'   => null,
+                'city'       => null,
+                'country'    => null,
+                'zip'        => null,
+                'phone'      => null,
+                'group'      => null,
+                'expires'    => $this->convertDate($patron['expires']),
+                'statuscode' => $patron['status'],
             ];
         }
         return [];
@@ -641,10 +659,9 @@ class PAIA extends DAIA
                     $password
                 );
             } catch (ILSException $e) {
-                $this->debug('Session expired, login again', 'info');
+                $this->debug('Session expired, login again', ['info' => 'info']);
             }
         }
-
         try {
             if ($this->paiaLogin($username, $password)) {
                 return $enrichUserDetails(
@@ -895,7 +912,7 @@ class PAIA extends DAIA
      */
     protected function paiaParseUserDetails($patron, $user_response)
     {
-        $username = $user_response['name'];
+        $username = trim($user_response['name']);
         if (count(explode(',', $username)) == 2) {
             $nameArr = explode(',', $username);
             $firstname = $nameArr[1];
@@ -906,8 +923,9 @@ class PAIA extends DAIA
             $lastname = '';
             array_shift($nameArr);
             foreach ($nameArr as $value) {
-                $lastname .= $value;
+                $lastname .= ' '.$value;
             }
+            $lastname = trim($lastname);
         }
 
         // TODO: implement parsing of user details according to types set
@@ -921,7 +939,12 @@ class PAIA extends DAIA
             ? $user_response['email'] : '');
         $user['major']     = null;
         $user['college']   = null;
-
+        // add other information from PAIA - we don't want anything to get lost while parsing
+        foreach ($user_response as $key => $value) {
+            if (!isset($user[$key])) {
+                $user[$key] = $value;
+            }
+        }
         return $user;
     }
 
@@ -1351,6 +1374,245 @@ class PAIA extends DAIA
             );
         }
         return $this->paiaParseUserDetails($patron, $responseArray);
+    }
+
+
+/********************* TODO **********************************/
+/* These methods are not working yet */
+
+    /**
+     * Get Default Request Group
+     *
+     * Returns the default request group
+     *
+     * @param array $patron      Patron information returned by the patronLogin
+     * method.
+     * @param array $holdDetails Optional array, only passed in when getting a list
+     * in the context of placing a hold; contains most of the same values passed to
+     * placeHold, minus the patron data.  May be used to limit the request group
+     * options or may be ignored.
+     *
+     * @return false|string      The default request group for the patron.
+     *
+     * @SuppressWarnings(PHPMD.UnusedFormalParameter)
+     */
+    public function getDefaultRequestGroup($patron = false, $holdDetails = null)
+    {
+        $requestGroups = $this->getRequestGroups(0, 0);
+        return $requestGroups[0]['id'];
+    }
+
+    /**
+     * Get request groups
+     *
+     * @param integer $bibId  BIB ID
+     * @param array   $patron Patron information returned by the patronLogin
+     * method.
+     *
+     * @return array  False if request groups not in use or an array of
+     * associative arrays with id and name keys
+     *
+     * @SuppressWarnings(PHPMD.UnusedFormalParameter)
+     */
+    public function getRequestGroups($bibId = null, $patron = null)
+    {
+        return [
+            [
+                'id' => 1,
+                'name' => 'Main Library'
+            ],
+            [
+                'id' => 2,
+                'name' => 'Branch Library'
+            ]
+        ];
+    }
+
+    /**
+     * Cancel Storage Retrieval Request
+     *
+     * Attempts to Cancel a Storage Retrieval Request on a particular item. The
+     * data in $cancelDetails['details'] is determined by
+     * getCancelStorageRetrievalRequestDetails().
+     *
+     * @param array $cancelDetails An array of item and patron data
+     *
+     * @return array               An array of data on each request including
+     * whether or not it was successful and a system message (if available)
+     */
+    public function cancelStorageRetrievalRequests($cancelDetails)
+    {
+        // Rewrite the items in the session, removing those the user wants to
+        // cancel.
+        $newRequests = new ArrayObject();
+        $retVal = ['count' => 0, 'items' => []];
+        $session = $this->getSession();
+        foreach ($session->storageRetrievalRequests as $current) {
+            if (!in_array($current['reqnum'], $cancelDetails['details'])) {
+                $newRequests->append($current);
+            } else {
+                if (!$this->isFailing(__METHOD__, 50)) {
+                    $retVal['count']++;
+                    $retVal['items'][$current['item_id']] = [
+                        'success' => true,
+                        'status' => 'storage_retrieval_request_cancel_success'
+                    ];
+                } else {
+                    $newRequests->append($current);
+                    $retVal['items'][$current['item_id']] = [
+                        'success' => false,
+                        'status' => 'storage_retrieval_request_cancel_fail',
+                        'sysMessage' =>
+                            'Demonstrating failure; keep trying and ' .
+                            'it will work eventually.'
+                    ];
+                }
+            }
+        }
+
+        $session->storageRetrievalRequests = $newRequests;
+        return $retVal;
+    }
+
+    /**
+     * Get Cancel Storage Retrieval Request Details
+     *
+     * In order to cancel a hold, Voyager requires the patron details an item ID
+     * and a recall ID. This function returns the item id and recall id as a string
+     * separated by a pipe, which is then submitted as form data in Hold.php. This
+     * value is then extracted by the CancelHolds function.
+     *
+     * @param array $details An array of item data
+     *
+     * @return string Data for use in a form field
+     */
+    public function getCancelStorageRetrievalRequestDetails($details)
+    {
+        return $details['reqnum'];
+    }
+
+    /**
+     * Check if hold or recall available
+     *
+     * This is responsible for determining if an item is requestable
+     *
+     * @param string $id     The Bib ID
+     * @param array  $data   An Array of item data
+     * @param patron $patron An array of patron data
+     *
+     * @return bool True if request is valid, false if not
+     *
+     * @SuppressWarnings(PHPMD.UnusedFormalParameter)
+     */
+    public function checkRequestIsValid($id, $data, $patron)
+    {
+/* TODO: needs to be implemented */
+        return true;
+    }
+
+    /**
+     * Check if storage retrieval request available
+     *
+     * This is responsible for determining if an item is requestable
+     *
+     * @param string $id     The Bib ID
+     * @param array  $data   An Array of item data
+     * @param patron $patron An array of patron data
+     *
+     * @return bool True if request is valid, false if not
+     *
+     * @SuppressWarnings(PHPMD.UnusedFormalParameter)
+     */
+    public function checkStorageRetrievalRequestIsValid($id, $data, $patron)
+    {
+        if (!$this->storageRetrievalRequests || $this->isFailing(__METHOD__, 10)) {
+            return false;
+        }
+        return true;
+    }
+
+protected $storageRetrievalRequests = true;
+
+    /**
+     * Place a Storage Retrieval Request
+     *
+     * Attempts to place a request on a particular item and returns
+     * an array with result details.
+     *
+     * @param array $details An array of item and patron data
+     *
+     * @return mixed An array of data on the request including
+     * whether or not it was successful and a system message (if available)
+     */
+    public function placeStorageRetrievalRequest($details)
+    {
+        if (!$this->storageRetrievalRequests) {
+            return [
+                "success" => false,
+                "sysMessage" => 'Storage Retrieval Requests are disabled.'
+            ];
+        }
+        // Simulate failure:
+        if ($this->isFailing(__METHOD__, 50)) {
+            return [
+                "success" => false,
+                "sysMessage" =>
+                    'Demonstrating failure; keep trying and ' .
+                    'it will work eventually.'
+            ];
+        }
+
+        $session = $this->getSession();
+        if (!isset($session->storageRetrievalRequests)) {
+            $session->storageRetrievalRequests = new ArrayObject();
+        }
+        $lastRequest = count($session->storageRetrievalRequests) - 1;
+        $nextId = $lastRequest >= 0
+            ? $session->storageRetrievalRequests[$lastRequest]['item_id'] + 1
+            : 0;
+
+        // Figure out appropriate expiration date:
+        if (!isset($details['requiredBy'])
+            || empty($details['requiredBy'])
+        ) {
+            $expire = strtotime("now + 30 days");
+        } else {
+            try {
+                $expire = $this->dateConverter->convertFromDisplayDate(
+                    "U", $details['requiredBy']
+                );
+            } catch (DateException $e) {
+                // Expiration date is invalid
+                return [
+                    'success' => false,
+                    'sysMessage' => 'storage_retrieval_request_date_invalid'
+                ];
+            }
+        }
+        if ($expire <= time()) {
+            return [
+                'success' => false,
+                'sysMessage' => 'storage_retrieval_request_date_past'
+            ];
+        }
+
+        $session->storageRetrievalRequests->append(
+            [
+                'id'       => $details['id'],
+                'source'   => $this->getRecordSource(),
+                'location' => $details['pickUpLocation'],
+                'expire'   =>
+                    $this->dateConverter->convertToDisplayDate('U', $expire),
+                'create'   =>
+                    $this->dateConverter->convertToDisplayDate('U', time()),
+                'processed' => rand() % 3 == 0
+                    ? $this->dateConverter->convertToDisplayDate('U', $expire) : '',
+                'reqnum'   => sprintf('%06d', $nextId),
+                'item_id'  => $nextId
+            ]
+        );
+
+        return ['success' => true];
     }
 
 }

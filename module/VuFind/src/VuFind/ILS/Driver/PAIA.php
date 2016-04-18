@@ -90,10 +90,11 @@ class PAIA extends DAIA
      *
      * @param \VuFind\Date\Converter $converter Date converter
      */
-    public function __construct(\VuFind\Date\Converter $converter, \Zend\Session\SessionManager $sessionManager)
+    public function __construct(\VuFind\Date\Converter $converter, \Zend\Session\SessionManager $sessionManager, \VuFind\Record\Loader $loader)
     {
         parent::__construct($converter);
         $this->sessionManager = $sessionManager;
+        $this->recordLoader = $loader;
     }
 
     /**
@@ -128,15 +129,57 @@ class PAIA extends DAIA
         }
         $this->paiaURL = $this->config['PAIA']['baseUrl'];
 
-        $this->config['cancelHolds'] = [];
-        $this->config['Holds'] = ['HMACKeys' => 'id:item_id', 'extraHoldFields' => 'item_id', 'defaultRequiredDate' => '', 'consortium' => false];
-        $this->config['Renewals'] = [];
-        $this->config['cancelStorageRetrievalRequests'] = [];
-        $this->config['storageRetrievalRequests'] = ['HMACKeys' => 'id:item_id', 'extraFields' => 'item_id', 'defaultRequiredDate' => '', 'helpText' => 'What is this?', 'helpText[de]' => 'Wat n dat?'];
-        $this->config['cancelILLRequests'] = [];
-        $this->config['ILLRequests'] = ['HMACKeys' => 'id', 'extraFields' => '', 'defaultRequiredDate' => '', 'helpText' => 'What is this?', 'helpText[de]' => 'Wat n dat?'];
-        $this->config['changePassword'] = [];
+        $holdsConfig = $this->multiArray('holdsConfig', $this->config['holdsConfig']);
+        foreach($holdsConfig as $key => $value) {
+            $this->config[$key] = $value;
+        }
+    }
 
+    /**
+     * Helper function to read the config file correctly
+     *
+     * Use multidimensional arrays in ini file, using dots
+     * in the key.
+     *
+     * @param string $secname Name of the ini section
+     * @param array  $section Array of the section to be parsed
+     *
+     * @return array Array of the section having been parsed
+     */
+    protected function multiArray($secname, $section) {
+        $explode_str = '.';
+        $escape_char = "'";
+        $data = [ $secname => $section ];
+        foreach ($data as $section_key => $section) {
+            // loop inside the section
+            foreach ($section as $key => $value) {
+                if (strpos($key, $explode_str)) {
+                    if (substr($key, 0, 1) !== $escape_char) {
+                        // key has a dot. Explode on it, then parse each subkeys
+                        // and set value at the right place thanks to references
+                        $sub_keys = explode($explode_str, $key);
+                        $subs =& $data[$section_key];
+                        foreach ($sub_keys as $sub_key) {
+                            if (!isset($subs[$sub_key])) {
+                                $subs[$sub_key] = [];
+                            }
+                            $subs =& $subs[$sub_key];
+                        }
+                        // set the value at the right place
+                        $subs = $value;
+                        // unset the dotted key, we don't need it anymore
+                        unset($data[$section_key][$key]);
+                    }
+                    // we have escaped the key, so we keep dots as they are
+                    else {
+                        $new_key = trim($key, $escape_char);
+                        $data[$section_key][$new_key] = $value;
+                        unset($data[$section_key][$key]);
+                    }
+                }
+            }
+        }
+        return $data[$secname];
     }
 
     // public functions implemented to satisfy Driver Interface
@@ -190,9 +233,9 @@ class PAIA extends DAIA
     DD - setConfig
     !! - supportsMethod
 
-    CC - getMyStorageRetrievalRequests
-    CC - checkStorageRetrievalRequestIsValid
-    CC - placeStorageRetrievalRequest
+    +- - getMyStorageRetrievalRequests
+    +- - checkStorageRetrievalRequestIsValid
+    +- - placeStorageRetrievalRequest
     CC - cancelStorageRetrievalRequests
     CC - getCancelStorageRetrievalRequestDetails
 
@@ -409,8 +452,13 @@ class PAIA extends DAIA
         // supported by PAIA, so return DAIA::getHolding
         $holding = parent::getHolding($id, $patron);
         // add PAIA specific things
-        $holding['mytest'] = 'test';
-        $holding['addStorageRetrievalRequestLink'] = 'auto';
+        $holding[0]['addLink'] = false;
+        $holding[0]['addStorageRetrievalRequestLink'] = false;
+
+        if ($this->getHoldLink($id, $holding[0]) !== null) {
+            $holding[0]['addStorageRetrievalRequestLink'] = true;
+            $holding[0]['addLink'] = true;
+        }
         return $holding;
     }
 
@@ -458,9 +506,10 @@ class PAIA extends DAIA
         };
 
         $results = [];
+        $x = 0;
         if (isset($fees['fee'])) {
             foreach ($fees['fee'] as $fee) {
-                $results[] = [
+                $results[$x] = [
                     // fee.amount 	1..1 	money 	amount of a single fee
                     'amount'      => $feeConverter($fee['amount']),
                     'checkout'    => '',
@@ -476,16 +525,37 @@ class PAIA extends DAIA
                     'id' => (isset($fee['edition'])
                         ? $this->getAlternativeItemId($fee['edition']) : ''),
                     // custom PAIA fields
-                    // fee.about 	0..1 	string 	textual information about the fee
+                    'about' => (isset($fee['about'])
+                        ? $fee['about'] : null),
+                    'feetypeid' => (isset($fee['feetypeid'])
+                        ? $fee['feetypeid'] : null),
+                    'driver' => (isset($fee['edition'])
+                        ? $this->getRecordDriver($fee['edition']) : ''),
                     // fee.item 	0..1 	URI 	item that caused the fee
                     // fee.feeid 	0..1 	URI 	URI of the type of service that
                     // caused the fee
-                    // fee.feetypeid 	0..1 	URI 	URI of the type of service that
-                    // caused the fee
                 ];
+                // TODO: set, for which fee types a title should be taken from the about field
+                $results[$x]['title'] = ($fee['feetypeid'] == 'http://paia.gbv.de/tubfind:fee-type:2')
+                    ? $results[$x]['about'] : null;
+                $x++;
             }
         }
         return $results;
+    }
+
+    /**
+     * Get a record driver object by a PAIA item ID
+     *
+     * @param string $item The item ID string
+     *
+     * @return \VuFind\RecordDriver A record driver for the given item if applicable.
+     */
+    protected function getRecordDriver($item) {
+        $itemArray = explode(':', $item);
+        $ppn = (count($itemArray) > 1) ? $itemArray[(count($itemArray)-1)] : null;
+        $recordDriver = ($ppn) ? $this->recordLoader->load(substr($ppn,1)) : null;
+        return $recordDriver;
     }
 
     /**
@@ -502,10 +572,8 @@ class PAIA extends DAIA
         // filters for getMyHolds are:
         // status = 1 - reserved (the document is not accessible for the patron yet,
         //              but it will be)
-        //          2 - ordered (the document is being made accessible for the
-        //              patron)
         //          4 - provided (the document is ready to be used by the patron)
-        $filter = ['status' => [1, 2, 4]];
+        $filter = ['status' => [1, 4]];
         // get items-docs for given filters
         $items = $this->paiaGetItems($patron, $filter);
 
@@ -562,6 +630,27 @@ class PAIA extends DAIA
         $items = $this->paiaGetItems($patron, $filter);
 
         return $this->mapPaiaItems($items, 'myTransactionsMapping');
+    }
+
+    /**
+     * Get Patron StorageRetrievalRequests
+     *
+     * This is responsible for retrieving all storage retrieval requests
+     * by a specific patron.
+     *
+     * @param array $patron The patron array from patronLogin
+     *
+     * @return array Array of the patron's storage retrieval requests on success,
+     */
+    public function getMyStorageRetrievalRequests($patron)
+    {
+        // filters for getMyStorageRetrievalRequests are:
+        // status = 2 - ordered (the document is ordered by the patron)
+        $filter = ['status' => [2]];
+        // get items-docs for given filters
+        $items = $this->paiaGetItems($patron, $filter);
+
+        return $this->mapPaiaItems($items, 'myStorageRetrievalRequestsMapping');
     }
 
     /**
@@ -732,6 +821,23 @@ class PAIA extends DAIA
             }
         }
         return $details;
+    }
+
+    /**
+     * Place a Storage Retrieval Request
+     *
+     * Attempts to place a request on a particular item and returns
+     * an array with result details.
+     *
+     * @param array $details An array of item and patron data
+     *
+     * @return mixed An array of data on the request including
+     * whether or not it was successful and a system message (if available)
+     */
+    public function placeStorageRetrievalRequest($details)
+    {
+        // Making a storage retrieval request is the same in PAIA as placing a Hold
+        return $this->placeHold($details);
     }
 
     /**
@@ -986,7 +1092,7 @@ class PAIA extends DAIA
             $result['item_id'] = (isset($doc['item']) ? $doc['item'] : '');
 
             $result['cancel_details']
-                = (isset($result['cancancel']) && $result['cancancel'])
+                = (isset($doc['cancancel']) && $doc['cancancel'])
                 ? $result['item_id'] : '';
 
             // edition (0..1) URI of a the document (no particular copy)
@@ -1012,9 +1118,8 @@ class PAIA extends DAIA
             // label (0..1) call number, shelf mark or similar item label
             $result['callnumber'] = (isset($doc['label']) ? $doc['label'] : null); // PAIA custom field
 
-            if (in_array($doc['status'], [1, 2])) {
+            if (in_array($doc['status'], 1)) {
                 // status == 1 => starttime: when the document was reserved
-                // status == 2 => starttime: when the document was ordered
                 $result['create'] = (isset($doc['starttime'])
                     ? $this->convertDatetime($doc['starttime']) : '');
             }
@@ -1027,6 +1132,71 @@ class PAIA extends DAIA
                 // patron)
                 $result['available'] = true;
             }
+
+            // Optional VuFind fields
+            /*
+            $result['reqnum'] = null;
+            $result['volume'] =  null;
+            $result['publication_year'] = null;
+            $result['isbn'] = null;
+            $result['issn'] = null;
+            $result['oclc'] = null;
+            $result['upc'] = null;
+            */
+
+            $results[] = $result;
+
+        }
+        return $results;
+    }
+
+    /**
+     * This PAIA helper function allows custom overrides for mapping of PAIA response
+     * to getMyStorageRetrievalRequests data structure.
+     *
+     * @param array $items Array of PAIA items to be mapped.
+     *
+     * @return array
+     */
+    protected function myStorageRetrievalRequestsMapping($items)
+    {
+        $results = [];
+
+        foreach ($items as $doc) {
+            $result = [];
+
+            // item (0..1) URI of a particular copy
+            $result['item_id'] = (isset($doc['item']) ? $doc['item'] : '');
+
+            $result['cancel_details']
+                = (isset($doc['cancancel']) && $doc['cancancel'])
+                ? $result['item_id'] : '';
+
+            // edition (0..1) URI of a the document (no particular copy)
+            // hook for retrieving alternative ItemId in case PAIA does not
+            // the needed id
+            $result['id'] = (isset($doc['edition'])
+                ? $this->getAlternativeItemId($doc['edition']) : '');
+
+            $result['type'] = $this->paiaStatusString($doc['status']);
+
+            $result['location'] = (isset($doc['location'])
+                ? $doc['location'] : null);
+
+            // queue (0..1) number of waiting requests for the document or item
+            $result['position'] =  (isset($doc['queue']) ? $doc['queue'] : null);
+
+            // only true if status == 4
+            $result['available'] = false;
+
+            // about (0..1) textual description of the document
+            $result['title'] = (isset($doc['about']) ? $doc['about'] : null);
+
+            // label (0..1) call number, shelf mark or similar item label
+            $result['callnumber'] = (isset($doc['label']) ? $doc['label'] : null); // PAIA custom field
+
+            $result['create'] = (isset($doc['starttime'])
+                ? $this->convertDatetime($doc['starttime']) : '');
 
             // Optional VuFind fields
             /*
@@ -1067,7 +1237,7 @@ class PAIA extends DAIA
             $result['item_id'] = (isset($doc['item']) ? $doc['item'] : '');
 
             $result['renew_details']
-                = (isset($result['canrenew']) && $result['canrenew'])
+                = (isset($doc['canrenew']) && $doc['canrenew'])
                 ? $result['item_id'] : '';
 
             // edition (0..1)  URI of a the document (no particular copy)
@@ -1376,6 +1546,27 @@ class PAIA extends DAIA
         return $this->paiaParseUserDetails($patron, $responseArray);
     }
 
+    /**
+     * Check if storage retrieval request available
+     *
+     * This is responsible for determining if an item is requestable
+     *
+     * @param string $id     The Bib ID
+     * @param array  $data   An Array of item data
+     * @param patron $patron An array of patron data
+     *
+     * @return bool True if request is valid, false if not
+     *
+     * @SuppressWarnings(PHPMD.UnusedFormalParameter)
+     */
+    public function checkStorageRetrievalRequestIsValid($id, $data, $patron)
+    {
+        if ($patron['status'] == 0 && $patron['expires'] > date('Y-m-d')) {
+            return true;
+        }
+        return false;
+    }
+
 
 /********************* TODO **********************************/
 /* These methods are not working yet */
@@ -1510,109 +1701,6 @@ class PAIA extends DAIA
         return true;
     }
 
-    /**
-     * Check if storage retrieval request available
-     *
-     * This is responsible for determining if an item is requestable
-     *
-     * @param string $id     The Bib ID
-     * @param array  $data   An Array of item data
-     * @param patron $patron An array of patron data
-     *
-     * @return bool True if request is valid, false if not
-     *
-     * @SuppressWarnings(PHPMD.UnusedFormalParameter)
-     */
-    public function checkStorageRetrievalRequestIsValid($id, $data, $patron)
-    {
-        if (!$this->storageRetrievalRequests || $this->isFailing(__METHOD__, 10)) {
-            return false;
-        }
-        return true;
-    }
 
-protected $storageRetrievalRequests = true;
-
-    /**
-     * Place a Storage Retrieval Request
-     *
-     * Attempts to place a request on a particular item and returns
-     * an array with result details.
-     *
-     * @param array $details An array of item and patron data
-     *
-     * @return mixed An array of data on the request including
-     * whether or not it was successful and a system message (if available)
-     */
-    public function placeStorageRetrievalRequest($details)
-    {
-        if (!$this->storageRetrievalRequests) {
-            return [
-                "success" => false,
-                "sysMessage" => 'Storage Retrieval Requests are disabled.'
-            ];
-        }
-        // Simulate failure:
-        if ($this->isFailing(__METHOD__, 50)) {
-            return [
-                "success" => false,
-                "sysMessage" =>
-                    'Demonstrating failure; keep trying and ' .
-                    'it will work eventually.'
-            ];
-        }
-
-        $session = $this->getSession();
-        if (!isset($session->storageRetrievalRequests)) {
-            $session->storageRetrievalRequests = new ArrayObject();
-        }
-        $lastRequest = count($session->storageRetrievalRequests) - 1;
-        $nextId = $lastRequest >= 0
-            ? $session->storageRetrievalRequests[$lastRequest]['item_id'] + 1
-            : 0;
-
-        // Figure out appropriate expiration date:
-        if (!isset($details['requiredBy'])
-            || empty($details['requiredBy'])
-        ) {
-            $expire = strtotime("now + 30 days");
-        } else {
-            try {
-                $expire = $this->dateConverter->convertFromDisplayDate(
-                    "U", $details['requiredBy']
-                );
-            } catch (DateException $e) {
-                // Expiration date is invalid
-                return [
-                    'success' => false,
-                    'sysMessage' => 'storage_retrieval_request_date_invalid'
-                ];
-            }
-        }
-        if ($expire <= time()) {
-            return [
-                'success' => false,
-                'sysMessage' => 'storage_retrieval_request_date_past'
-            ];
-        }
-
-        $session->storageRetrievalRequests->append(
-            [
-                'id'       => $details['id'],
-                'source'   => $this->getRecordSource(),
-                'location' => $details['pickUpLocation'],
-                'expire'   =>
-                    $this->dateConverter->convertToDisplayDate('U', $expire),
-                'create'   =>
-                    $this->dateConverter->convertToDisplayDate('U', time()),
-                'processed' => rand() % 3 == 0
-                    ? $this->dateConverter->convertToDisplayDate('U', $expire) : '',
-                'reqnum'   => sprintf('%06d', $nextId),
-                'item_id'  => $nextId
-            ]
-        );
-
-        return ['success' => true];
-    }
 
 }

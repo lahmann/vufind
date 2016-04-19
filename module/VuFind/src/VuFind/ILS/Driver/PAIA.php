@@ -535,9 +535,24 @@ class PAIA extends DAIA
                     // fee.feeid 	0..1 	URI 	URI of the type of service that
                     // caused the fee
                 ];
-                // TODO: set, for which fee types a title should be taken from the about field
-                $results[$x]['title'] = ($fee['feetypeid'] == 'http://paia.gbv.de/tubfind:fee-type:2')
-                    ? $results[$x]['about'] : null;
+
+                // Special treatment for several feetypes
+                // perhaps move this to customized driver as its pretty library specific
+                switch ($fee['feetypeid']) {
+                    case 'http://paia.gbv.de/tubfind:fee-type:2':
+                        $results[$x]['title'] = $results[$x]['about'];
+                        break;
+                    case 'http://paia.gbv.de/tubfind:fee-type:8':
+                        // the original duedate is in the about field inside [] (for GBV PAIA)
+                        // the return date is the date of creation of the fees
+                        $about = explode('[', $results[$x]['about']);
+                        $results[$x]['title'] = $about[0];
+                        $results[$x]['duedate'] = $this->convertDate(str_replace(']', '', $about[1]));
+                        break;
+                    default:
+                        // Title not necessary for this fee type
+                        $results[$x]['title'] = null;
+                }
                 $x++;
             }
         }

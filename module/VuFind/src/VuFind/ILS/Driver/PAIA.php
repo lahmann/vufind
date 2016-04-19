@@ -1118,13 +1118,15 @@ class PAIA extends DAIA
             // label (0..1) call number, shelf mark or similar item label
             $result['callnumber'] = (isset($doc['label']) ? $doc['label'] : null); // PAIA custom field
 
-            if (in_array($doc['status'], 1)) {
+            if ($doc['status'] == 1 || in_array($doc['status'], 1)) {
                 // status == 1 => starttime: when the document was reserved
                 $result['create'] = (isset($doc['starttime'])
                     ? $this->convertDatetime($doc['starttime']) : '');
+                $result['duedate'] = (isset($doc['endtime'])
+                    ? $this->convertDatetime($doc['endtime']) : '');
             }
 
-            if ($doc['status'] == '4') {
+            if ($doc['status'] == '4' || in_array($doc['status'], 4)) {
                 // status == 4 => endtime: when the provision will expire
                 $result['expire'] = (isset($doc['endtime'])
                     ? $this->convertDatetime($doc['endtime']) : '');

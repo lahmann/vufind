@@ -509,10 +509,10 @@ class PAIA extends DAIA
         $x = 0;
         if (isset($fees['fee'])) {
             foreach ($fees['fee'] as $fee) {
+                $moreData = $this->getAdditionalFeeData($fee);
                 $results[$x] = [
                     // fee.amount 	1..1 	money 	amount of a single fee
                     'amount'      => $feeConverter($fee['amount']),
-                    'checkout'    => '',
                     // fee.feetype 	0..1 	string 	textual description of the type
                     // of service that caused the fee
                     'fine'    => (isset($fee['feetype']) ? $fee['feetype'] : null),
@@ -520,7 +520,6 @@ class PAIA extends DAIA
                     // fee.date 	0..1 	date 	date when the fee was claimed
                     'createdate'  => (isset($fee['date'])
                         ? $this->convertDate($fee['date']) : null),
-                    'duedate' => '',
                     // fee.edition 	0..1 	URI 	edition that caused the fee
                     'id' => (isset($fee['edition'])
                         ? $this->getAlternativeItemId($fee['edition']) : ''),
@@ -530,33 +529,39 @@ class PAIA extends DAIA
                     'feetypeid' => (isset($fee['feetypeid'])
                         ? $fee['feetypeid'] : null),
                     'driver' => (isset($fee['edition'])
-                        ? $this->getRecordDriver($fee['edition']) : ''),
-                    // fee.item 	0..1 	URI 	item that caused the fee
-                    // fee.feeid 	0..1 	URI 	URI of the type of service that
-                    // caused the fee
+                        ? $this->getRecordDriver($fee['edition']) : null),
+                    'item' => (isset($fee['item']) ? $fee['item'] : null),
+                    'barcode' => (isset($fee['item'])
+                        ? $this->getItemBarcode($fee['item']) : null),
+                    'checkout'    => (isset($moreData['checkout']) ? $moreData['checkout'] : null),
+                    'duedate' => (isset($moreData['duedate']) ? $moreData['duedate'] : null),
+                    'returndate' => (isset($moreData['returndate']) ? $moreData['returndate'] : null),
+                    'title' => (isset($moreData['title']) ? $moreData['title'] : null),
                 ];
 
-                // Special treatment for several feetypes
-                // perhaps move this to customized driver as its pretty library specific
-                switch ($fee['feetypeid']) {
-                    case 'http://paia.gbv.de/tubfind:fee-type:2':
-                        $results[$x]['title'] = $results[$x]['about'];
-                        break;
-                    case 'http://paia.gbv.de/tubfind:fee-type:8':
-                        // the original duedate is in the about field inside [] (for GBV PAIA)
-                        // the return date is the date of creation of the fees
-                        $about = explode('[', $results[$x]['about']);
-                        $results[$x]['title'] = $about[0];
-                        $results[$x]['duedate'] = $this->convertDate(str_replace(']', '', $about[1]));
-                        break;
-                    default:
-                        // Title not necessary for this fee type
-                        $results[$x]['title'] = null;
-                }
                 $x++;
             }
         }
+
         return $results;
+    }
+
+    /**
+     * Gets additional array fields for the item
+     *
+     * @param array $fee The fee array from PAIA
+     *
+     * @return array Additional fee data for the item
+     */
+    protected function getAdditionalFeeData($fee)
+    {
+        $additionalData = [];
+        // Add the item title using the about field,
+        // but only if this fee is caused by some item
+        if (isset($fee['item'])) {
+            $additionalData['title'] = $fee['about'];
+        }
+        return $additionalData;
     }
 
     /**
@@ -568,9 +573,22 @@ class PAIA extends DAIA
      */
     protected function getRecordDriver($item) {
         $itemArray = explode(':', $item);
-        $ppn = (count($itemArray) > 1) ? $itemArray[(count($itemArray)-1)] : null;
+        $ppn = (count($itemArray) >= 2 && $itemArray[(count($itemArray)-2)] == 'ppn') ? $itemArray[(count($itemArray)-1)] : null;
         $recordDriver = ($ppn) ? $this->recordLoader->load(substr($ppn,1)) : null;
         return $recordDriver;
+    }
+
+    /**
+     * Get the barcode of a PAIA item
+     *
+     * @param string $item The item ID string
+     *
+     * @return string The barcode for the given item if applicable.
+     */
+    protected function getItemBarcode($item) {
+        $itemArray = explode(':', $item);
+        $barcode = (count($itemArray) >= 2 && $itemArray[(count($itemArray)-2)] == 'bar') ? $itemArray[(count($itemArray)-1)] : null;
+        return $barcode;
     }
 
     /**
@@ -1586,7 +1604,7 @@ class PAIA extends DAIA
 
 
 /********************* TODO **********************************/
-/* These methods are not working yet */
+/* These methods are not working properly yet (or are using just dummy values) */
 
     /**
      * Get Default Request Group

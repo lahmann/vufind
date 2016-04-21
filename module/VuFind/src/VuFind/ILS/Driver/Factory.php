@@ -143,6 +143,35 @@ class Factory
     }
 
     /**
+     * Factory for PAIA driver.
+     *
+     * @param ServiceManager $sm Service manager.
+     *
+     * @return PAIA
+     */
+    public static function getPAIA(ServiceManager $sm)
+    {
+        return new PAIA(
+            $sm->getServiceLocator()->get('VuFind\DateConverter'),
+            $sm->getServiceLocator()->get('VuFind\SessionManager')
+        );
+    }
+
+    /**
+     * Factory for PICA driver.
+     *
+     * @param ServiceManager $sm Service manager.
+     *
+     * @return PICA
+     */
+    public static function getPICA(ServiceManager $sm)
+    {
+        return new PICA(
+            $sm->getServiceLocator()->get('VuFind\DateConverter')
+        );
+    }
+
+    /**
      * Factory for Unicorn driver.
      *
      * @param ServiceManager $sm Service manager.

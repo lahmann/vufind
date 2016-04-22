@@ -129,10 +129,10 @@ class PAIA extends DAIA
         }
         $this->paiaURL = $this->config['PAIA']['baseUrl'];
 
-        $holdsConfig = $this->multiArray('holdsConfig', $this->config['holdsConfig']);
+        /*$holdsConfig = $this->multiArray('holdsConfig', $this->config['holdsConfig']);
         foreach($holdsConfig as $key => $value) {
             $this->config[$key] = $value;
-        }
+        }*/
     }
 
     /**
@@ -146,7 +146,7 @@ class PAIA extends DAIA
      *
      * @return array Array of the section having been parsed
      */
-    protected function multiArray($secname, $section) {
+    /*protected function multiArray($secname, $section) {
         $explode_str = '.';
         $escape_char = "'";
         $data = [ $secname => $section ];
@@ -180,7 +180,7 @@ class PAIA extends DAIA
             }
         }
         return $data[$secname];
-    }
+    }*/
 
     // public functions implemented to satisfy Driver Interface
 
@@ -506,13 +506,12 @@ class PAIA extends DAIA
         };
 
         $results = [];
-        $x = 0;
         if (isset($fees['fee'])) {
             foreach ($fees['fee'] as $fee) {
-                $moreData = $this->getAdditionalFeeData($fee);
-                $results[$x] = [
+                $result = [
                     // fee.amount 	1..1 	money 	amount of a single fee
                     'amount'      => $feeConverter($fee['amount']),
+                    'checkout'    => '',
                     // fee.feetype 	0..1 	string 	textual description of the type
                     // of service that caused the fee
                     'fine'    => (isset($fee['feetype']) ? $fee['feetype'] : null),
@@ -520,29 +519,19 @@ class PAIA extends DAIA
                     // fee.date 	0..1 	date 	date when the fee was claimed
                     'createdate'  => (isset($fee['date'])
                         ? $this->convertDate($fee['date']) : null),
+                    'duedate' => '',
                     // fee.edition 	0..1 	URI 	edition that caused the fee
                     'id' => (isset($fee['edition'])
                         ? $this->getAlternativeItemId($fee['edition']) : ''),
                     // custom PAIA fields
-                    'about' => (isset($fee['about'])
-                        ? $fee['about'] : null),
-                    'feetypeid' => (isset($fee['feetypeid'])
-                        ? $fee['feetypeid'] : null),
-                    'driver' => (isset($fee['edition'])
-                        ? $this->getRecordDriver($fee['edition']) : null),
-                    'item' => (isset($fee['item']) ? $fee['item'] : null),
-                    'barcode' => (isset($fee['item'])
-                        ? $this->getPaiaItemBarcode($fee['item']) : null),
-                    'checkout'    => (isset($moreData['checkout']) ? $moreData['checkout'] : null),
-                    'duedate' => (isset($moreData['duedate']) ? $moreData['duedate'] : null),
-                    'returndate' => (isset($moreData['returndate']) ? $moreData['returndate'] : null),
-                    'title' => (isset($moreData['title']) ? $moreData['title'] : null),
+                    // fee.about 	0..1 	string 	textual information about the fee
+                    // fee.item 	0..1 	URI 	item that caused the fee
+                    // fee.feeid 	0..1 	URI 	URI of the type of service that
+                    // caused the fee
                 ];
-
-                $x++;
+                $results[] = $result + $this->getAdditionalFeeData($fee);
             }
         }
-
         return $results;
     }
 
@@ -561,6 +550,27 @@ class PAIA extends DAIA
         if (isset($fee['item'])) {
             $additionalData['title'] = $fee['about'];
         }
+
+        // custom PAIA fields
+        $additionalData['about']      = (isset($fee['about'])
+            ? $fee['about'] : null);
+        $additionalData['feetypeid']  = (isset($fee['feetypeid'])
+            ? $fee['feetypeid'] : null);
+        /*$additionalData['driver']     = (isset($fee['edition'])
+            ? $this->getRecordDriver($fee['edition']) : null);*/
+        $additionalData['item']       = (isset($fee['item'])
+            ? $fee['item'] : null);
+        /*$additionalData['barcode']    = (isset($fee['item'])
+            ? $this->getPaiaItemBarcode($fee['item']) : null);*/
+        $additionalData['checkout']   = (isset($moreData['checkout'])
+            ? $moreData['checkout'] : null);
+        $additionalData['duedate']    = (isset($moreData['duedate'])
+            ? $moreData['duedate'] : null);
+        $additionalData['returndate'] = (isset($moreData['returndate'])
+            ? $moreData['returndate'] : null);
+        $additionalData['title']      = (isset($moreData['title'])
+            ? $moreData['title'] : null);
+
         return $additionalData;
     }
 
@@ -571,12 +581,12 @@ class PAIA extends DAIA
      *
      * @return \VuFind\RecordDriver A record driver for the given item if applicable.
      */
-    protected function getRecordDriver($item) {
+    /*protected function getRecordDriver($item) {
         $itemArray = explode(':', $item);
         $ppn = (count($itemArray) >= 2 && $itemArray[(count($itemArray)-2)] == 'ppn') ? $itemArray[(count($itemArray)-1)] : null;
         $recordDriver = ($ppn) ? $this->recordLoader->load(substr($ppn,1)) : null;
         return $recordDriver;
-    }
+    }*/
 
     /**
      * Get the barcode of a PAIA item
@@ -585,11 +595,11 @@ class PAIA extends DAIA
      *
      * @return string The barcode for the given item if applicable.
      */
-    protected function getPaiaItemBarcode($item) {
+    /*protected function getPaiaItemBarcode($item) {
         $itemArray = explode(':', $item);
         $barcode = (count($itemArray) >= 2 && $itemArray[(count($itemArray)-2)] == 'bar') ? $itemArray[(count($itemArray)-1)] : null;
         return $barcode;
-    }
+    }*/
 
     /**
      * Get Patron Holds
@@ -637,6 +647,7 @@ class PAIA extends DAIA
                 'zip'        => null,
                 'phone'      => null,
                 'group'      => null,
+                // PAIA specific custom values
                 'expires'    => $this->convertDate($patron['expires']),
                 'statuscode' => $patron['status'],
             ];
@@ -1151,7 +1162,7 @@ class PAIA extends DAIA
             // label (0..1) call number, shelf mark or similar item label
             $result['callnumber'] = (isset($doc['label']) ? $doc['label'] : null); // PAIA custom field
 
-            if ($doc['status'] == 1 || in_array($doc['status'], 1)) {
+            if ($doc['status'] == 1 ) {
                 // status == 1 => starttime: when the document was reserved
                 $result['create'] = (isset($doc['starttime'])
                     ? $this->convertDatetime($doc['starttime']) : '');
@@ -1159,7 +1170,7 @@ class PAIA extends DAIA
                     ? $this->convertDatetime($doc['endtime']) : '');
             }
 
-            if ($doc['status'] == '4' || in_array($doc['status'], 4)) {
+            if ($doc['status'] == '4') {
                 // status == 4 => endtime: when the provision will expire
                 $result['expire'] = (isset($doc['endtime'])
                     ? $this->convertDatetime($doc['endtime']) : '');
@@ -1295,7 +1306,10 @@ class PAIA extends DAIA
             // reminder (0..1) number of times the patron has been reminded
             $reminder = (isset($doc['reminder']) ? $doc['reminder'] : null);
 
+            // custom PAIA field
             // starttime (0..1) date and time when the status began
+            $result['startTime'] = (isset($doc['starttime'])
+                ? $this->convertDatetime($doc['starttime']) : '');
 
             // endtime (0..1) date and time when the status will expire
             $result['dueTime'] = (isset($doc['endtime'])
@@ -1603,8 +1617,8 @@ class PAIA extends DAIA
     }
 
 
-/********************* TODO **********************************/
-/* These methods are not working properly yet (or are using just dummy values) */
+    /********************* TODO **********************************/
+    /* These methods are not working properly yet (or are using just dummy values) */
 
     /**
      * Get Default Request Group
@@ -1732,7 +1746,7 @@ class PAIA extends DAIA
      */
     public function checkRequestIsValid($id, $data, $patron)
     {
-/* TODO: needs to be implemented */
+        /* TODO: needs to be implemented */
         return true;
     }
 

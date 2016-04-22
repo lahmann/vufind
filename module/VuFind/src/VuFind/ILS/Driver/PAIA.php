@@ -532,7 +532,7 @@ class PAIA extends DAIA
                         ? $this->getRecordDriver($fee['edition']) : null),
                     'item' => (isset($fee['item']) ? $fee['item'] : null),
                     'barcode' => (isset($fee['item'])
-                        ? $this->getItemBarcode($fee['item']) : null),
+                        ? $this->getPaiaItemBarcode($fee['item']) : null),
                     'checkout'    => (isset($moreData['checkout']) ? $moreData['checkout'] : null),
                     'duedate' => (isset($moreData['duedate']) ? $moreData['duedate'] : null),
                     'returndate' => (isset($moreData['returndate']) ? $moreData['returndate'] : null),
@@ -585,7 +585,7 @@ class PAIA extends DAIA
      *
      * @return string The barcode for the given item if applicable.
      */
-    protected function getItemBarcode($item) {
+    protected function getPaiaItemBarcode($item) {
         $itemArray = explode(':', $item);
         $barcode = (count($itemArray) >= 2 && $itemArray[(count($itemArray)-2)] == 'bar') ? $itemArray[(count($itemArray)-1)] : null;
         return $barcode;

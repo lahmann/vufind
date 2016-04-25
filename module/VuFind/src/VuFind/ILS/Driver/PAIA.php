@@ -128,59 +128,7 @@ class PAIA extends DAIA
             throw new ILSException('PAIA/baseUrl configuration needs to be set.');
         }
         $this->paiaURL = $this->config['PAIA']['baseUrl'];
-
-        /*$holdsConfig = $this->multiArray('holdsConfig', $this->config['holdsConfig']);
-        foreach($holdsConfig as $key => $value) {
-            $this->config[$key] = $value;
-        }*/
     }
-
-    /**
-     * Helper function to read the config file correctly
-     *
-     * Use multidimensional arrays in ini file, using dots
-     * in the key.
-     *
-     * @param string $secname Name of the ini section
-     * @param array  $section Array of the section to be parsed
-     *
-     * @return array Array of the section having been parsed
-     */
-    /*protected function multiArray($secname, $section) {
-        $explode_str = '.';
-        $escape_char = "'";
-        $data = [ $secname => $section ];
-        foreach ($data as $section_key => $section) {
-            // loop inside the section
-            foreach ($section as $key => $value) {
-                if (strpos($key, $explode_str)) {
-                    if (substr($key, 0, 1) !== $escape_char) {
-                        // key has a dot. Explode on it, then parse each subkeys
-                        // and set value at the right place thanks to references
-                        $sub_keys = explode($explode_str, $key);
-                        $subs =& $data[$section_key];
-                        foreach ($sub_keys as $sub_key) {
-                            if (!isset($subs[$sub_key])) {
-                                $subs[$sub_key] = [];
-                            }
-                            $subs =& $subs[$sub_key];
-                        }
-                        // set the value at the right place
-                        $subs = $value;
-                        // unset the dotted key, we don't need it anymore
-                        unset($data[$section_key][$key]);
-                    }
-                    // we have escaped the key, so we keep dots as they are
-                    else {
-                        $new_key = trim($key, $escape_char);
-                        $data[$section_key][$new_key] = $value;
-                        unset($data[$section_key][$key]);
-                    }
-                }
-            }
-        }
-        return $data[$secname];
-    }*/
 
     // public functions implemented to satisfy Driver Interface
 
@@ -459,6 +407,7 @@ class PAIA extends DAIA
             $holding[0]['addStorageRetrievalRequestLink'] = true;
             $holding[0]['addLink'] = true;
         }
+
         return $holding;
     }
 
@@ -523,12 +472,8 @@ class PAIA extends DAIA
                     // fee.edition 	0..1 	URI 	edition that caused the fee
                     'id' => (isset($fee['edition'])
                         ? $this->getAlternativeItemId($fee['edition']) : ''),
-                    // custom PAIA fields
-                    // fee.about 	0..1 	string 	textual information about the fee
-                    // fee.item 	0..1 	URI 	item that caused the fee
-                    // fee.feeid 	0..1 	URI 	URI of the type of service that
-                    // caused the fee
                 ];
+                // custom PAIA fields can get added in getAdditionalFeeData
                 $results[] = $result + $this->getAdditionalFeeData($fee);
             }
         }
@@ -536,7 +481,8 @@ class PAIA extends DAIA
     }
 
     /**
-     * Gets additional array fields for the item
+     * Gets additional array fields for the item.
+     * Override this method in your custom PAIA driver if necessary.
      *
      * @param array $fee The fee array from PAIA
      *
@@ -552,24 +498,18 @@ class PAIA extends DAIA
         }
 
         // custom PAIA fields
+        // fee.about 	0..1 	string 	textual information about the fee
+        // fee.item 	0..1 	URI 	item that caused the fee
+        // fee.feeid 	0..1 	URI 	URI of the type of service that
+        // caused the fee
+        $additionalData['feeid']      = (isset($fee['feeid'])
+            ? $fee['feeid'] : null);
         $additionalData['about']      = (isset($fee['about'])
             ? $fee['about'] : null);
-        $additionalData['feetypeid']  = (isset($fee['feetypeid'])
-            ? $fee['feetypeid'] : null);
-        /*$additionalData['driver']     = (isset($fee['edition'])
-            ? $this->getRecordDriver($fee['edition']) : null);*/
         $additionalData['item']       = (isset($fee['item'])
             ? $fee['item'] : null);
-        /*$additionalData['barcode']    = (isset($fee['item'])
-            ? $this->getPaiaItemBarcode($fee['item']) : null);*/
-        $additionalData['checkout']   = (isset($moreData['checkout'])
-            ? $moreData['checkout'] : null);
-        $additionalData['duedate']    = (isset($moreData['duedate'])
-            ? $moreData['duedate'] : null);
-        $additionalData['returndate'] = (isset($moreData['returndate'])
-            ? $moreData['returndate'] : null);
-        $additionalData['title']      = (isset($moreData['title'])
-            ? $moreData['title'] : null);
+        $additionalData['title']      = (isset($fee['title'])
+            ? $fee['title'] : null);
 
         return $additionalData;
     }

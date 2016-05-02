@@ -1244,7 +1244,7 @@ class PAIA extends DAIA
             $result['renew'] = (isset($doc['renewals']) ? $doc['renewals'] : null);
 
             // reminder (0..1) number of times the patron has been reminded
-            $reminder = (isset($doc['reminder']) ? $doc['reminder'] : null);
+            $result['reminder'] = (isset($doc['reminder']) ? $doc['reminder'] : null);
 
             // custom PAIA field
             // starttime (0..1) date and time when the status began

@@ -153,8 +153,7 @@ class Factory
     {
         return new PAIA(
             $sm->getServiceLocator()->get('VuFind\DateConverter'),
-            $sm->getServiceLocator()->get('VuFind\SessionManager'),
-            $sm->getServiceLocator()->get('VuFind\RecordLoader')
+            $sm->getServiceLocator()->get('VuFind\SessionManager')
         );
     }
 

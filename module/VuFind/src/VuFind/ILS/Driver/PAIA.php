@@ -90,11 +90,10 @@ class PAIA extends DAIA
      *
      * @param \VuFind\Date\Converter $converter Date converter
      */
-    public function __construct(\VuFind\Date\Converter $converter, \Zend\Session\SessionManager $sessionManager, \VuFind\Record\Loader $loader)
+    public function __construct(\VuFind\Date\Converter $converter, \Zend\Session\SessionManager $sessionManager)
     {
         parent::__construct($converter);
         $this->sessionManager = $sessionManager;
-        $this->recordLoader = $loader;
     }
 
     /**
@@ -398,17 +397,21 @@ class PAIA extends DAIA
     {
         // only patron-specific behaviour in VuFind2.4 is for "addLink" which is not
         // supported by PAIA, so return DAIA::getHolding
-        $holding = parent::getHolding($id, $patron);
+        $holdings = parent::getHolding($id, $patron);
+        $returnHoldings = [];
         // add PAIA specific things
-        $holding[0]['addLink'] = false;
-        $holding[0]['addStorageRetrievalRequestLink'] = false;
+        foreach ($holdings as $holding) {
+            $holding['addLink'] = false;
+            $holding['addStorageRetrievalRequestLink'] = false;
 
-        if ($this->getHoldLink($id, $holding[0]) !== null) {
-            $holding[0]['addStorageRetrievalRequestLink'] = true;
-            $holding[0]['addLink'] = true;
+            if ($this->getHoldLink($id, $holding) !== null) {
+                $holding['addStorageRetrievalRequestLink'] = true;
+                $holding['addLink'] = true;
+            }
+            $returnHoldings[] = $holding;
         }
 
-        return $holding;
+        return $returnHoldings;
     }
 
     /**
@@ -474,7 +477,7 @@ class PAIA extends DAIA
                         ? $this->getAlternativeItemId($fee['edition']) : ''),
                 ];
                 // custom PAIA fields can get added in getAdditionalFeeData
-                $results[] = $result + $this->getAdditionalFeeData($fee);
+                $results[] = $result + $this->getAdditionalFeeData($fee, $patron);
             }
         }
         return $results;
@@ -488,7 +491,7 @@ class PAIA extends DAIA
      *
      * @return array Additional fee data for the item
      */
-    protected function getAdditionalFeeData($fee)
+    protected function getAdditionalFeeData($fee, $patron = null)
     {
         $additionalData = [];
         // Add the item title using the about field,
@@ -513,33 +516,6 @@ class PAIA extends DAIA
 
         return $additionalData;
     }
-
-    /**
-     * Get a record driver object by a PAIA item ID
-     *
-     * @param string $item The item ID string
-     *
-     * @return \VuFind\RecordDriver A record driver for the given item if applicable.
-     */
-    /*protected function getRecordDriver($item) {
-        $itemArray = explode(':', $item);
-        $ppn = (count($itemArray) >= 2 && $itemArray[(count($itemArray)-2)] == 'ppn') ? $itemArray[(count($itemArray)-1)] : null;
-        $recordDriver = ($ppn) ? $this->recordLoader->load(substr($ppn,1)) : null;
-        return $recordDriver;
-    }*/
-
-    /**
-     * Get the barcode of a PAIA item
-     *
-     * @param string $item The item ID string
-     *
-     * @return string The barcode for the given item if applicable.
-     */
-    /*protected function getPaiaItemBarcode($item) {
-        $itemArray = explode(':', $item);
-        $barcode = (count($itemArray) >= 2 && $itemArray[(count($itemArray)-2)] == 'bar') ? $itemArray[(count($itemArray)-1)] : null;
-        return $barcode;
-    }*/
 
     /**
      * Get Patron Holds
@@ -1550,12 +1526,30 @@ class PAIA extends DAIA
      */
     public function checkStorageRetrievalRequestIsValid($id, $data, $patron)
     {
+        return $this->checkRequestIsValid($id, $data, $patron);
+    }
+
+    /**
+     * Check if hold or recall available
+     *
+     * This is responsible for determining if an item is requestable
+     *
+     * @param string $id     The Bib ID
+     * @param array  $data   An Array of item data
+     * @param patron $patron An array of patron data
+     *
+     * @return bool True if request is valid, false if not
+     *
+     * @SuppressWarnings(PHPMD.UnusedFormalParameter)
+     */
+    public function checkRequestIsValid($id, $data, $patron)
+    {
+        // TODO: make this more configurable
         if ($patron['status'] == 0 && $patron['expires'] > date('Y-m-d')) {
             return true;
         }
         return false;
     }
-
 
     /********************* TODO **********************************/
     /* These methods are not working properly yet (or are using just dummy values) */
@@ -1671,24 +1665,6 @@ class PAIA extends DAIA
         return $details['reqnum'];
     }
 
-    /**
-     * Check if hold or recall available
-     *
-     * This is responsible for determining if an item is requestable
-     *
-     * @param string $id     The Bib ID
-     * @param array  $data   An Array of item data
-     * @param patron $patron An array of patron data
-     *
-     * @return bool True if request is valid, false if not
-     *
-     * @SuppressWarnings(PHPMD.UnusedFormalParameter)
-     */
-    public function checkRequestIsValid($id, $data, $patron)
-    {
-        /* TODO: needs to be implemented */
-        return true;
-    }
 
 
 

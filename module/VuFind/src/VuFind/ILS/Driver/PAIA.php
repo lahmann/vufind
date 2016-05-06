@@ -30,7 +30,7 @@
  * @link     https://vufind.org/wiki/development:plugins:ils_drivers Wiki
  */
 
-namespace VuFind\ILS\Driver;
+namespace finc\ILS\Driver;
 use VuFind\Exception\ILS as ILSException;
 
 /**
@@ -393,7 +393,7 @@ class PAIA extends DAIA
      * keys: id, availability (boolean), status, location, reserve, callnumber,
      * duedate, number, barcode.
      */
-    public function getHolding($id, array $patron = null)
+    /*public function getHolding($id, array $patron = null)
     {
         // only patron-specific behaviour in VuFind2.4 is for "addLink" which is not
         // supported by PAIA, so return DAIA::getHolding
@@ -412,24 +412,7 @@ class PAIA extends DAIA
         }
 
         return $returnHoldings;
-    }
-
-    /**
-     * Get Hold Link
-     *
-     * The goal for this method is to return a URL to a "place hold" web page on
-     * the ILS OPAC. This is used for ILSs that do not support an API or method
-     * to place Holds.
-     *
-     * @param string $id      The id of the bib record
-     * @param array  $details Item details from getHoldings return array
-     *
-     * @return string         URL to ILS's OPAC's place hold screen.
-     */
-    public function getHoldLink($id, $details)
-    {
-        return $this->getILSHoldLink($id, $details);
-    }
+    }*/
 
     /**
      * Get Patron Fines
@@ -719,7 +702,7 @@ class PAIA extends DAIA
 
     /**
      * PAIA helper function to map session data to return value of patronLogin()
-     * 
+     *
      * @param $details  Patron details returned by patronLogin
      * @param $password Patron cataloge password
      * @return mixed
@@ -732,7 +715,7 @@ class PAIA extends DAIA
         $details['cat_password'] = $password;
         return $details;
     }
-    
+
     /**
      * Place Hold
      *
@@ -892,20 +875,6 @@ class PAIA extends DAIA
     /*
      * PAIA functions
      */
-
-    /**
-     * Support method to generate ILS specific HoldLink for public exposure through
-     * getHoldLink
-     *
-     * @param string $id      Bibliographic Record ID
-     * @param array  $details Item details array from getHolding
-     *
-     * @return string
-     */
-    protected function getILSHoldLink($id, $details)
-    {
-        return parent::getHoldLink($id, $details);
-    }
 
     /**
      * PAIA support method to return strings for PAIA service status values

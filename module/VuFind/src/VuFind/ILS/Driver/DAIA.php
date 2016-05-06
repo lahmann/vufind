@@ -796,25 +796,173 @@ class DAIA extends AbstractBase implements
             }
         }
 
-        /*'availability' => '0',
-        'status' => '',  // string - needs to be computed from availability info
-        'duedate' => '', // if checked_out else null
-        'returnDate' => '', // false if not recently returned(?)
-        'requests_placed' => '', // total number of placed holds
-        'is_holdable' => false, // place holding possible?*/
+        /*'returnDate' => '', // false if not recently returned(?)*/
 
         if (!empty($availableLink)) {
             $return['ilslink'] = $availableLink;
         }
 
         $return['item_notes']      = $item_notes;
-        $return['status']          = $status;
+        $return['status']          = $this->getStatusString($item);
         $return['availability']    = $availability;
         $return['duedate']         = $duedate;
         $return['requests_placed'] = $queue;
         $return['services']        = $this->getAvailableItemServices($services);
 
+        // In this DAIA driver implementation addLink and is_holdable are assumed
+        // Boolean as patron based availability requires either a patron-id or -type.
+        // This should be handled in a custom DAIA driver
+        $return['addLink'] = $return['is_holdable'] = $this->checkIsHoldable($item);
+        $return['holdtype']        = $this->getHoldType($item);
+
+        // Check if the item is available for storage retrieval request if it is
+        // not holdable.
+        $return['addStorageRetrievalRequestLink'] = !$return['is_holdable']
+            ? $this->checkIsStorageRetrievalRequest($item) : false;
+
+        // add a custom Field to allow passing custom DAIA data to the frontend in
+        // order to use it for more precise display of availability
+        $return['customData']      = $this->getCustomData($item);
+
         return $return;
+    }
+
+    /**
+     * Helper function to allow custom data in status array.
+     *
+     * @param $item
+     * @return array
+     */
+    protected function getCustomData($item)
+    {
+        return [];
+    }
+
+    /**
+     * Helper function to return an appropriate status string for current item.
+     *
+     * @param $item
+     * @return string
+     */
+    protected function getStatusString($item)
+    {
+        // status cannot be null as this will crash the translator
+        return '';
+    }
+
+    /**
+     * Helper function to determine if item is holdable.
+     * DAIA does not genuinly allow distinguishing between holdable and recallable
+     * items. This could be achieved by usage of limitations but this would not be
+     * shared functionality between different DAIA implementations (thus should be
+     * implemented in custom drivers). Therefore is_holdable returns whether an item
+     * is recallable based on unavailable services and the existence of a valid
+     * duedate.
+     *
+     * @param $item
+     * @return bool
+     */
+    protected function checkIsHoldable($item)
+    {
+        // This basic implementation checks the item for being unavailable for loan
+        // and presentation but with a duedate.
+        $services = ['available'=>[], 'unavailable'=>[]];
+        $duedate = '';
+        if (isset($item['available'])) {
+            // check if item is loanable or presentation
+            foreach ($item['available'] as $available) {
+                if (isset($available['service'])
+                    && in_array($available['service'], ['loan', 'presentation'])
+                ) {
+                    $services['available'][] = $available['service'];
+                }
+            }
+        }
+
+        if (isset($item['unavailable'])) {
+            foreach ($item['unavailable'] as $unavailable) {
+                if (isset($unavailable['service'])
+                    && in_array($unavailable['service'], ['loan', 'presentation'])
+                ) {
+                    $services['unavailable'][] = $unavailable['service'];
+                }
+                // attribute expected is mandatory for unavailable element
+                if (isset($unavailable['expected'])) {
+                    try {
+                        $duedate = $this->dateConverter
+                            ->convertToDisplayDate(
+                                'Y-m-d', $unavailable['expected']
+                            );
+                    } catch (\Exception $e) {
+                        $this->debug('Date conversion failed: ' . $e->getMessage());
+                        $duedate = null;
+                    }
+                }
+            }
+        }
+
+        foreach ($services['available'] as $service) {
+            if (!in_array($service, $services['unavailable'])) {
+                // we have at least one available service so assume the item cannot
+                // be placed on hold
+                return false;
+            }
+        }
+
+        // If we have come so far we know that all services are unavailable. Having a
+        // duedate indicates that the item will be available at some point in the
+        // future qualifying it as being able to place a hold on it.
+        return !empty($duedate);
+    }
+
+    /**
+     * Helper function to determine if the item is available as storage retrieval.
+     *
+     * @param $item
+     * @return bool
+     */
+    protected function checkIsStorageRetrievalRequest($item)
+    {
+        $services = ['available'=>[], 'unavailable'=>[]];
+        if (isset($item['available'])) {
+            // check if item is loanable or presentation
+            foreach ($item['available'] as $available) {
+                if (isset($available['service'])
+                    && in_array($available['service'], ['loan', 'presentation'])
+                ) {
+                    $services['available'][] = $available['service'];
+                }
+            }
+        }
+
+        if (isset($item['unavailable'])) {
+            foreach ($item['unavailable'] as $unavailable) {
+                if (isset($unavailable['service'])
+                    && in_array($unavailable['service'], ['loan', 'presentation'])
+                ) {
+                    $services['unavailable'][] = $unavailable['service'];
+                }
+            }
+        }
+
+        return in_array('loan', array_diff($services['available'], $services['unavailable']));
+    }
+
+    /**
+     * Helper function to determine the holdtype availble for current item.
+     * DAIA does not genuinly allow distinguishing between holdable and recallable
+     * items. This could be achieved by usage of limitations but this would not be
+     * shared functionality between different DAIA implementations (thus should be
+     * implemented in custom drivers). Therefore getHoldType always returns recall.
+     *
+     * @param $item
+     * @param $patron
+     * @return string 'recall'
+     */
+    protected function getHoldType($item, $patron)
+    {
+        // return holdtype (hold, recall or block if patron is not allowed) for item
+        return $this->checkIsHoldable($item) ? 'recall' : null;
     }
 
     /**
@@ -952,7 +1100,7 @@ class DAIA extends AbstractBase implements
         }
         return array_intersect(['loan', 'presentation'], $availableServices);
     }
-    
+
     /**
      * Logs content of message elements in DAIA response for debugging
      *

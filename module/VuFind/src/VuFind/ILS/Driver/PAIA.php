@@ -693,17 +693,11 @@ class PAIA extends DAIA
 
         $session = $this->getSession();
 
-        $enrichUserDetails = function ($details, $password) use ($session) {
-            $details['cat_username'] = $session->patron;
-            $details['cat_password'] = $password;
-            return $details;
-        };
-
         // if we already have a session with access_token and patron id, try to get
         // patron info with session data
         if (isset($session->expires) && $session->expires > time()) {
             try {
-                return $enrichUserDetails(
+                return $this->enrichUserDetails(
                     $this->paiaGetUserDetails($session->patron),
                     $password
                 );
@@ -713,7 +707,7 @@ class PAIA extends DAIA
         }
         try {
             if ($this->paiaLogin($username, $password)) {
-                return $enrichUserDetails(
+                return $this->enrichUserDetails(
                     $this->paiaGetUserDetails($session->patron),
                     $password
                 );
@@ -723,6 +717,22 @@ class PAIA extends DAIA
         }
     }
 
+    /**
+     * PAIA helper function to map session data to return value of patronLogin()
+     * 
+     * @param $details  Patron details returned by patronLogin
+     * @param $password Patron cataloge password
+     * @return mixed
+     */
+    protected function enrichUserDetails($details, $password)
+    {
+        $session = $this->getSession();
+
+        $details['cat_username'] = $session->patron;
+        $details['cat_password'] = $password;
+        return $details;
+    }
+    
     /**
      * Place Hold
      *

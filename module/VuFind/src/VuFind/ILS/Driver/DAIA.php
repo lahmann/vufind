@@ -208,6 +208,13 @@ class DAIA extends AbstractBase implements
      */
     public function getStatus($id)
     {
+        // check ids for existing availability data in cache and skip these ids
+        if ($item = $this->getCachedData($id)) {
+            if ($item != null) {
+                return $item;
+            }
+        }
+
         // let's retrieve the DAIA document by URI
         try {
             $rawResult = $this->doHTTPRequest($this->generateURI($id));
@@ -216,7 +223,10 @@ class DAIA extends AbstractBase implements
             $doc = $this->extractDaiaDoc($id, $rawResult);
             if (!is_null($doc)) {
                 // parse the extracted DAIA document and return the status info
-                return $this->parseDaiaDoc($id, $doc);
+                $data = $this->parseDaiaDoc($id, $doc);
+                // cache the status information
+                $this->putCachedData($id, $data);
+                return $data;
             }
         } catch (ILSException $e) {
             $this->debug($e->getMessage());
@@ -247,6 +257,16 @@ class DAIA extends AbstractBase implements
     {
         $status = [];
 
+        // check cache for given ids and skip these ids if availability data is found
+        foreach ($ids as $key=>$id) {
+            if ($item = $this->getCachedData($id)) {
+                if ($item != null) {
+                    $status[] = $item;
+                    unset($ids[$key]);
+                }
+            }
+        }
+
         try {
             if ($this->multiQuery) {
                 // perform one DAIA query with multiple URIs
@@ -261,7 +281,10 @@ class DAIA extends AbstractBase implements
                     if (!is_null($doc)) {
                         // a document with the corresponding id exists, which
                         // means we got status information for that record
-                        $status[] = $this->parseDaiaDoc($id, $doc);
+                        $data = $this->parseDaiaDoc($id, $doc);
+                        // cache the status information
+                        $this->putCachedData($id, $data);
+                        $status[] = $data;
                     }
                     unset($doc);
                 }
@@ -276,7 +299,10 @@ class DAIA extends AbstractBase implements
                     if (!is_null($doc)) {
                         // parse the extracted DAIA document and save the status
                         // info
-                        $status[] = $this->parseDaiaDoc($id, $doc);
+                        $data = $this->parseDaiaDoc($id, $doc);
+                        // cache the status information
+                        $this->putCachedData($id, $data);
+                        $status[] = $data;
                     }
                 }
             }
@@ -454,6 +480,21 @@ class DAIA extends AbstractBase implements
             $multiURI .= $this->generateURI($id) . '|';
         }
         return rtrim($multiURI, '|');
+    }
+
+    /**
+     * Add instance-specific context to a cache key suffix (to ensure that
+     * multiple drivers don't accidentally share values in the cache).
+     *
+     * @param string $key Cache key suffix
+     *
+     * @return string
+     */
+    protected function formatCacheKey($key)
+    {
+        // Override the base class formatting with DAIA-specific URI
+        // to ensure proper caching in a MultiBackend environment.
+        return 'DAIA-' . md5($this->generateURI(($key)));
     }
 
     /**

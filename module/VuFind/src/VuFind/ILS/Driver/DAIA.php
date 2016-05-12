@@ -60,6 +60,13 @@ class DAIA extends AbstractBase implements
     protected $baseUrl;
 
     /**
+     * Flag to switch on/off caching for DAIA items
+     *
+     * @var bool
+     */
+    protected $daiaCacheEnabled = false;
+
+    /**
      * DAIA query identifier prefix
      *
      * @var string
@@ -159,6 +166,16 @@ class DAIA extends AbstractBase implements
         } else {
             $this->debug('No ContentTypes for response defined. Accepting any.');
         }
+        if (isset($this->config['DAIA']['daiaCache'])) {
+            $this->daiaCacheEnabled = $this->config['DAIA']['daiaCache'];
+        } else {
+            $this->debug('Caching not enabled, disabling it by default.');
+        }
+        if (isset($this->config['DAIA']['daiaCacheLifetime'])) {
+            $this->cacheLifetime = $this->config['DAIA']['daiaCacheLifetime'];
+        } else {
+            $this->debug('Cache lifetime not set, using VuFind\ILS\Driver\AbstractBase default value.');
+        }
     }
 
     /**
@@ -209,7 +226,7 @@ class DAIA extends AbstractBase implements
     public function getStatus($id)
     {
         // check ids for existing availability data in cache and skip these ids
-        if ($item = $this->getCachedData($id)) {
+        if ($this->daiaCacheEnabled && $item = $this->getCachedData($id)) {
             if ($item != null) {
                 return $item;
             }
@@ -259,7 +276,7 @@ class DAIA extends AbstractBase implements
 
         // check cache for given ids and skip these ids if availability data is found
         foreach ($ids as $key=>$id) {
-            if ($item = $this->getCachedData($id)) {
+            if ($this->daiaCacheEnabled && $item = $this->getCachedData($id)) {
                 if ($item != null) {
                     $status[] = $item;
                     unset($ids[$key]);
@@ -267,47 +284,50 @@ class DAIA extends AbstractBase implements
             }
         }
 
-        try {
-            if ($this->multiQuery) {
-                // perform one DAIA query with multiple URIs
-                $rawResult = $this
-                    ->doHTTPRequest($this->generateMultiURIs($ids));
-                // the id used in VuFind can differ from the document-URI
-                // (depending on how the URI is generated)
-                foreach ($ids as $id) {
-                    // it is assumed that each DAIA document has a unique URI,
-                    // so get the document with the corresponding id
-                    $doc = $this->extractDaiaDoc($id, $rawResult);
-                    if (!is_null($doc)) {
-                        // a document with the corresponding id exists, which
-                        // means we got status information for that record
-                        $data = $this->parseDaiaDoc($id, $doc);
-                        // cache the status information
-                        $this->putCachedData($id, $data);
-                        $status[] = $data;
+        // only query DAIA service if we have some ids left
+        if (count($ids) > 0) {
+            try {
+                if ($this->multiQuery) {
+                    // perform one DAIA query with multiple URIs
+                    $rawResult = $this
+                        ->doHTTPRequest($this->generateMultiURIs($ids));
+                    // the id used in VuFind can differ from the document-URI
+                    // (depending on how the URI is generated)
+                    foreach ($ids as $id) {
+                        // it is assumed that each DAIA document has a unique URI,
+                        // so get the document with the corresponding id
+                        $doc = $this->extractDaiaDoc($id, $rawResult);
+                        if (!is_null($doc)) {
+                            // a document with the corresponding id exists, which
+                            // means we got status information for that record
+                            $data = $this->parseDaiaDoc($id, $doc);
+                            // cache the status information
+                            $this->putCachedData($id, $data);
+                            $status[] = $data;
+                        }
+                        unset($doc);
                     }
-                    unset($doc);
-                }
-            } else {
-                // multiQuery is not supported, so retrieve DAIA documents one by
-                // one
-                foreach ($ids as $id) {
-                    $rawResult = $this->doHTTPRequest($this->generateURI($id));
-                    // extract the DAIA document for the current id from the
-                    // HTTPRequest's result
-                    $doc = $this->extractDaiaDoc($id, $rawResult);
-                    if (!is_null($doc)) {
-                        // parse the extracted DAIA document and save the status
-                        // info
-                        $data = $this->parseDaiaDoc($id, $doc);
-                        // cache the status information
-                        $this->putCachedData($id, $data);
-                        $status[] = $data;
+                } else {
+                    // multiQuery is not supported, so retrieve DAIA documents one by
+                    // one
+                    foreach ($ids as $id) {
+                        $rawResult = $this->doHTTPRequest($this->generateURI($id));
+                        // extract the DAIA document for the current id from the
+                        // HTTPRequest's result
+                        $doc = $this->extractDaiaDoc($id, $rawResult);
+                        if (!is_null($doc)) {
+                            // parse the extracted DAIA document and save the status
+                            // info
+                            $data = $this->parseDaiaDoc($id, $doc);
+                            // cache the status information
+                            $this->putCachedData($id, $data);
+                            $status[] = $data;
+                        }
                     }
                 }
+            } catch (ILSException $e) {
+                $this->debug($e->getMessage());
             }
-        } catch (ILSException $e) {
-            $this->debug($e->getMessage());
         }
         return $status;
     }

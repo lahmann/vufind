@@ -71,6 +71,20 @@ class Factory
     }
 
     /**
+     * Factory for LBS4 driver.
+     *
+     * @param ServiceManager $sm Service manager.
+     *
+     * @return LBS4
+     */
+    public static function getLBS4(ServiceManager $sm)
+    {
+        return new LBS4(
+            $sm->getServiceLocator()->get('VuFind\DateConverter')
+        );
+    }
+
+    /**
      * Factory for Demo driver.
      *
      * @param ServiceManager $sm Service manager.
@@ -143,32 +157,15 @@ class Factory
     }
 
     /**
-     * Factory for PAIA driver.
+     * Factory for KohaILSDI driver.
      *
      * @param ServiceManager $sm Service manager.
      *
-     * @return PAIA
+     * @return KohaILSDI
      */
-    public static function getPAIA(ServiceManager $sm)
+    public static function getKohaILSDI(ServiceManager $sm)
     {
-        return new PAIA(
-            $sm->getServiceLocator()->get('VuFind\DateConverter'),
-            $sm->getServiceLocator()->get('VuFind\SessionManager')
-        );
-    }
-
-    /**
-     * Factory for PICA driver.
-     *
-     * @param ServiceManager $sm Service manager.
-     *
-     * @return PICA
-     */
-    public static function getPICA(ServiceManager $sm)
-    {
-        return new PICA(
-            $sm->getServiceLocator()->get('VuFind\DateConverter')
-        );
+        return new KohaILSDI($sm->getServiceLocator()->get('VuFind\DateConverter'));
     }
 
     /**

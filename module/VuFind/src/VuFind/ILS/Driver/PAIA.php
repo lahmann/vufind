@@ -58,6 +58,13 @@ class PAIA extends DAIA
     protected $paiaURL;
 
     /**
+     * Flag to switch on/off caching for PAIA items
+     *
+     * @var bool
+     */
+    protected $paiaCacheEnabled = false;
+
+    /**
      * Session containing PAIA login information
      *
      * @var Zend\Session\Container
@@ -127,6 +134,13 @@ class PAIA extends DAIA
             throw new ILSException('PAIA/baseUrl configuration needs to be set.');
         }
         $this->paiaURL = $this->config['PAIA']['baseUrl'];
+
+        // do we have caching enabled for PAIA
+        if (isset($this->config['PAIA']['paiaCache'])) {
+            $this->paiaCacheEnabled = $this->config['PAIA']['paiaCache'];
+        } else {
+            $this->debug('Caching not enabled, disabling it by default.');
+        }
     }
 
     // public functions implemented to satisfy Driver Interface
@@ -717,6 +731,27 @@ class PAIA extends DAIA
     }
 
     /**
+     * Returns an array with PAIA confirmations based on the given holdDetails which
+     * will be used for a request.
+     * Currently two condition types are supported:
+     *  - http://purl.org/ontology/paia#StorageCondition to select a document
+     *    location -- mapped to pickUpLocation
+     *  - http://purl.org/ontology/paia#FeeCondition to confirm or select a document
+     *    service causing a fee -- not mapped yet
+     *
+     * @param $details
+     * @return array
+     */
+    protected function getConfirmations($holdDetails) {
+        $confirmations = [];
+        if (isset($holdDetails['pickUpLocation'])) {
+            $confirmations['http://purl.org/ontology/paia#StorageCondition']
+                = [$holdDetails['pickUpLocation']];
+        }
+        return $confirmations;
+    }
+
+    /**
      * Place Hold
      *
      * Attempts to place a hold or recall on a particular item and returns
@@ -732,11 +767,14 @@ class PAIA extends DAIA
     public function placeHold($holdDetails)
     {
         $item = $holdDetails['item_id'];
-
-        $items = [];
-        $items[] = ['item' => stripslashes($item)];
         $patron = $holdDetails['patron'];
-        $post_data = ["doc" => $items];
+
+        $doc = [];
+        $doc['item'] = stripslashes($item);
+        if ($confirm = $this->getConfirmations($holdDetails)) {
+            $doc["confirm"] = $confirm;
+        }
+        $post_data['doc'][] = $doc;
 
         try {
             $array_response = $this->paiaPostAsArray(
@@ -770,6 +808,12 @@ class PAIA extends DAIA
                         'success' => true,
                         'sysMessage' => 'Successfully requested'
                     ];
+                    // if caching is enabled for DAIA remove the cached data for the
+                    // current item otherwise the changed status will not be shown
+                    // before the cache expires
+                    if ($this->daiaCacheEnabled) {
+                        $this->removeCachedData($holdDetails['doc_id']);
+                    }
                 }
             }
         }
@@ -885,10 +929,8 @@ class PAIA extends DAIA
      */
     protected function paiaStatusString($status)
     {
-        if (isset($statusStrings[$status])) {
-            return $statusStrings[$status];
-        }
-        return '';
+        return isset(self::$statusStrings[$status])
+            ? self::$statusStrings[$status] : '';
     }
 
     /**
@@ -902,9 +944,17 @@ class PAIA extends DAIA
      */
     protected function paiaGetItems($patron, $filter = [])
     {
+        // check for existing data in cache
+        if ($this->paiaCacheEnabled) {
+            $itemsResponse = $this->getCachedData($patron['cat_username'] . '_items');
+        }
+
+        if (!isset($itemsResponse) || $itemsResponse == null) {
         $itemsResponse = $this->paiaGetAsArray(
             'core/'.$patron['cat_username'].'/items'
         );
+            $this->putCachedData($patron['cat_username'] . '_items', $itemsResponse);
+        }
 
         if (isset($itemsResponse['doc'])) {
             if (count($filter)) {
@@ -1042,8 +1092,8 @@ class PAIA extends DAIA
 
             $result['type'] = $this->paiaStatusString($doc['status']);
 
-            $result['location'] = (isset($doc['location'])
-                ? $doc['location'] : null);
+            // storage (0..1) textual description of location of the document
+            $result['location'] = (isset($doc['storage']) ? $doc['storage'] : null);
 
             // queue (0..1) number of waiting requests for the document or item
             $result['position'] =  (isset($doc['queue']) ? $doc['queue'] : null);
@@ -1057,22 +1107,32 @@ class PAIA extends DAIA
             // label (0..1) call number, shelf mark or similar item label
             $result['callnumber'] = (isset($doc['label']) ? $doc['label'] : null); // PAIA custom field
 
-            if ($doc['status'] == 1 ) {
-                // status == 1 => starttime: when the document was reserved
+            /*
+             * meaning of starttime and endtime depends on status:
+             *
+             * status | starttime                      | endtime
+             * -------+--------------------------------+-------------------------------------------------------
+             * 0      | -                              | -
+             * 1 	  | when the document was reserved | when the reserved document is expected to be available
+             * 2 	  | when the document was ordered  | when the ordered document is expected to be available
+             * 3 	  | when the document was lend 	   | when the loan period ends or ended (due)
+             * 4 	  | when the document is provided  | when the provision will expire
+             * 5 	  | when the request was rejected  | -
+             */
+
                 $result['create'] = (isset($doc['starttime'])
                     ? $this->convertDatetime($doc['starttime']) : '');
+
+            if ($doc['status'] == '4') {
+                $result['expire'] = (isset($doc['endtime'])
+                    ? $this->convertDatetime($doc['endtime']) : '');
+            } else {
                 $result['duedate'] = (isset($doc['endtime'])
                     ? $this->convertDatetime($doc['endtime']) : '');
             }
 
-            if ($doc['status'] == '4') {
-                // status == 4 => endtime: when the provision will expire
-                $result['expire'] = (isset($doc['endtime'])
-                    ? $this->convertDatetime($doc['endtime']) : '');
-                // status: provided (the document is ready to be used by the
-                // patron)
-                $result['available'] = true;
-            }
+            // status: provided (the document is ready to be used by the patron)
+            $result['available'] = $doc['status'] == 4 ? true : false;
 
             // Optional VuFind fields
             /*
@@ -1121,8 +1181,8 @@ class PAIA extends DAIA
 
             $result['type'] = $this->paiaStatusString($doc['status']);
 
-            $result['location'] = (isset($doc['location'])
-                ? $doc['location'] : null);
+            // storage (0..1) textual description of location of the document
+            $result['location'] = (isset($doc['storage']) ? $doc['storage'] : null);
 
             // queue (0..1) number of waiting requests for the document or item
             $result['position'] =  (isset($doc['queue']) ? $doc['queue'] : null);
@@ -1220,8 +1280,8 @@ class PAIA extends DAIA
             // error (0..1) error message, for instance if a request was rejected
             $result['message'] = (isset($doc['error']) ? $doc['error'] : '');
 
-            // storage (0..1) location of the document
-            $result['institution_name'] = (isset($doc['storage'])
+            // storage (0..1) textual description of location of the document
+            $result['borrowingLocation'] = (isset($doc['storage'])
                 ? $doc['storage'] : '');
 
             // storageid (0..1) location URI
@@ -1240,7 +1300,7 @@ class PAIA extends DAIA
             $result['issn'] = null;
             $result['oclc'] = null;
             $result['upc'] = null;
-            $result['borrowingLocation'] = null;
+            $result['institution_name'] = null;
             */
 
             $results[] = $result;
@@ -1643,8 +1703,5 @@ class PAIA extends DAIA
     {
         return $details['reqnum'];
     }
-
-
-
 
 }

@@ -1147,7 +1147,20 @@ class DAIA extends AbstractBase implements
         }
         return $itemLimitationTypes;
     }
-    
+
+    /**
+     * Returns the value for "number" in VuFind getStatus/getHolding array
+     *
+     * @param array $item    Array with DAIA item data
+     * @param int   $counter Integer counting items as alternative return value
+     *
+     * @return mixed
+     */
+    protected function getItemNumber($item, $counter)
+    {
+        return $counter;
+    }
+
     /**
      * Returns the value for "location" in VuFind getStatus/getHolding array
      *

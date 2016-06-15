@@ -789,7 +789,6 @@ class PAIA extends DAIA
         }
 
         $details = [];
-
         if (array_key_exists('error', $array_response)) {
             $details = [
                 'success' => false,
@@ -1456,6 +1455,7 @@ class PAIA extends DAIA
             $responseArray = $this->paiaParseJsonAsArray($responseJson);
         } catch (ILSException $e) {
             $this->debug($e->getCode() . ':' . $e->getMessage());
+/* TODO: do not return empty array, this causes eventually confusion */
             return [];
         }
 
@@ -1584,124 +1584,13 @@ class PAIA extends DAIA
     public function checkRequestIsValid($id, $data, $patron)
     {
         // TODO: make this more configurable
-        if ($patron['status'] == 0 && $patron['expires'] > date('Y-m-d')) {
+        if (
+            $patron['status'] == 0
+            && $patron['expires'] > date('Y-m-d')
+            && in_array('write_items', $this->getSession()->scope)
+        ) {
             return true;
         }
         return false;
     }
-
-    /********************* TODO **********************************/
-    /* These methods are not working properly yet (or are using just dummy values) */
-
-    /**
-     * Get Default Request Group
-     *
-     * Returns the default request group
-     *
-     * @param array $patron      Patron information returned by the patronLogin
-     * method.
-     * @param array $holdDetails Optional array, only passed in when getting a list
-     * in the context of placing a hold; contains most of the same values passed to
-     * placeHold, minus the patron data.  May be used to limit the request group
-     * options or may be ignored.
-     *
-     * @return false|string      The default request group for the patron.
-     *
-     * @SuppressWarnings(PHPMD.UnusedFormalParameter)
-     */
-    public function getDefaultRequestGroup($patron = false, $holdDetails = null)
-    {
-        $requestGroups = $this->getRequestGroups(0, 0);
-        return $requestGroups[0]['id'];
-    }
-
-    /**
-     * Get request groups
-     *
-     * @param integer $bibId  BIB ID
-     * @param array   $patron Patron information returned by the patronLogin
-     * method.
-     *
-     * @return array  False if request groups not in use or an array of
-     * associative arrays with id and name keys
-     *
-     * @SuppressWarnings(PHPMD.UnusedFormalParameter)
-     */
-    public function getRequestGroups($bibId = null, $patron = null)
-    {
-        return [
-            [
-                'id' => 1,
-                'name' => 'Main Library'
-            ],
-            [
-                'id' => 2,
-                'name' => 'Branch Library'
-            ]
-        ];
-    }
-
-    /**
-     * Cancel Storage Retrieval Request
-     *
-     * Attempts to Cancel a Storage Retrieval Request on a particular item. The
-     * data in $cancelDetails['details'] is determined by
-     * getCancelStorageRetrievalRequestDetails().
-     *
-     * @param array $cancelDetails An array of item and patron data
-     *
-     * @return array               An array of data on each request including
-     * whether or not it was successful and a system message (if available)
-     */
-    public function cancelStorageRetrievalRequests($cancelDetails)
-    {
-        // Rewrite the items in the session, removing those the user wants to
-        // cancel.
-        $newRequests = new ArrayObject();
-        $retVal = ['count' => 0, 'items' => []];
-        $session = $this->getSession();
-        foreach ($session->storageRetrievalRequests as $current) {
-            if (!in_array($current['reqnum'], $cancelDetails['details'])) {
-                $newRequests->append($current);
-            } else {
-                if (!$this->isFailing(__METHOD__, 50)) {
-                    $retVal['count']++;
-                    $retVal['items'][$current['item_id']] = [
-                        'success' => true,
-                        'status' => 'storage_retrieval_request_cancel_success'
-                    ];
-                } else {
-                    $newRequests->append($current);
-                    $retVal['items'][$current['item_id']] = [
-                        'success' => false,
-                        'status' => 'storage_retrieval_request_cancel_fail',
-                        'sysMessage' =>
-                            'Demonstrating failure; keep trying and ' .
-                            'it will work eventually.'
-                    ];
-                }
-            }
-        }
-
-        $session->storageRetrievalRequests = $newRequests;
-        return $retVal;
-    }
-
-    /**
-     * Get Cancel Storage Retrieval Request Details
-     *
-     * In order to cancel a hold, Voyager requires the patron details an item ID
-     * and a recall ID. This function returns the item id and recall id as a string
-     * separated by a pipe, which is then submitted as form data in Hold.php. This
-     * value is then extracted by the CancelHolds function.
-     *
-     * @param array $details An array of item data
-     *
-     * @return string Data for use in a form field
-     */
-    public function getCancelStorageRetrievalRequestDetails($details)
-    {
-        return $details['reqnum'];
-    }
-
 }

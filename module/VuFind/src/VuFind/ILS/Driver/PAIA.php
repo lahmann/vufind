@@ -1463,11 +1463,6 @@ class PAIA extends DAIA
         return $responseArray;
     }
 
-    public function getScope()
-    {
-        return $this->getSession()->scope;
-    }
-
     /**
      * PAIA authentication function
      *

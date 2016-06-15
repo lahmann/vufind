@@ -563,6 +563,7 @@ class PAIA extends DAIA
                 // PAIA specific custom values
                 'expires'    => $this->convertDate($patron['expires']),
                 'statuscode' => $patron['status'],
+                'canWrite'   => in_array('write_items', $this->getSession()->scope),
             ];
         }
         return [];
@@ -1460,6 +1461,11 @@ class PAIA extends DAIA
         }
 
         return $responseArray;
+    }
+
+    public function getScope()
+    {
+        return $this->getSession()->scope;
     }
 
     /**

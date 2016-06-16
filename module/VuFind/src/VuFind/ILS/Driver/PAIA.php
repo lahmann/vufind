@@ -407,40 +407,6 @@ class PAIA extends DAIA
     }
 
     /**
-     * Get Holding
-     *
-     * This is responsible for retrieving the holding information of a certain
-     * record.
-     *
-     * @param string $id     The record id to retrieve the holdings for
-     * @param array  $patron Patron data
-     *
-     * @return array         On success, an associative array with the following
-     * keys: id, availability (boolean), status, location, reserve, callnumber,
-     * duedate, number, barcode.
-     */
-    /*public function getHolding($id, array $patron = null)
-    {
-        // only patron-specific behaviour in VuFind2.4 is for "addLink" which is not
-        // supported by PAIA, so return DAIA::getHolding
-        $holdings = parent::getHolding($id, $patron);
-        $returnHoldings = [];
-        // add PAIA specific things
-        foreach ($holdings as $holding) {
-            $holding['addLink'] = false;
-            $holding['addStorageRetrievalRequestLink'] = false;
-
-            if ($this->getHoldLink($id, $holding) !== null) {
-                $holding['addStorageRetrievalRequestLink'] = true;
-                $holding['addLink'] = true;
-            }
-            $returnHoldings[] = $holding;
-        }
-
-        return $returnHoldings;
-    }*/
-
-    /**
      * Get Patron Fines
      *
      * This is responsible for retrieving all fines by a specific patron.

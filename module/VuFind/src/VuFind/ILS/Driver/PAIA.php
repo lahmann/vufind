@@ -276,7 +276,19 @@ class PAIA extends DAIA
                         'sysMessage' => 'Successfully cancelled'
                     ];
                     $count++;
+
+                    // DAIA cache cannot be cleared for particular item as PAIA only
+                    // operates with specific item URIs and the DAIA cache is setup
+                    // by doc URIs (containing items with URIs)
                 }
+            }
+
+            // If caching is enabled for PAIA clear the cache as at least for one
+            // item cancel was successfull and therefore the status changed.
+            // Otherwise the changed status will not be shown before the cache
+            // expires.
+            if ($this->paiaCacheEnabled) {
+                $this->removeCachedData($patron['cat_username'] . '_items');
             }
         }
         $returnArray = ['count' => $count, 'items' => $details];
@@ -911,6 +923,17 @@ class PAIA extends DAIA
                         'sysMessage' => 'Request rejected'
                     ];
                 }
+
+                // DAIA cache cannot be cleared for particular item as PAIA only
+                // operates with specific item URIs and the DAIA cache is setup
+                // by doc URIs (containing items with URIs)
+            }
+
+            // If caching is enabled for PAIA clear the cache as at least for one
+            // item renew was successfull and therefore the status changed. Otherwise
+            // the changed status will not be shown before the cache expires.
+            if ($this->paiaCacheEnabled) {
+                $this->removeCachedData($patron['cat_username'] . '_items');
             }
         }
         $returnArray = ['blocks' => false, 'details' => $details];

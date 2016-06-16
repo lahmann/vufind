@@ -561,8 +561,9 @@ class PAIA extends DAIA
                 'phone'      => null,
                 'group'      => null,
                 // PAIA specific custom values
-                'expires'    => $this->convertDate($patron['expires']),
-                'statuscode' => $patron['status'],
+                'expires'    => isset($patron['expires'])
+                    ? $this->convertDate($patron['expires']) : null,
+                'statuscode' => isset($patron['status']) ? $patron['status'] : null,
                 'canWrite'   => in_array('write_items', $this->getSession()->scope),
             ];
         }
@@ -950,9 +951,9 @@ class PAIA extends DAIA
         }
 
         if (!isset($itemsResponse) || $itemsResponse == null) {
-        $itemsResponse = $this->paiaGetAsArray(
-            'core/'.$patron['cat_username'].'/items'
-        );
+            $itemsResponse = $this->paiaGetAsArray(
+                'core/'.$patron['cat_username'].'/items'
+            );
             $this->putCachedData($patron['cat_username'] . '_items', $itemsResponse);
         }
 
@@ -1120,8 +1121,8 @@ class PAIA extends DAIA
              * 5 	  | when the request was rejected  | -
              */
 
-                $result['create'] = (isset($doc['starttime'])
-                    ? $this->convertDatetime($doc['starttime']) : '');
+            $result['create'] = (isset($doc['starttime'])
+                ? $this->convertDatetime($doc['starttime']) : '');
 
             if ($doc['status'] == '4') {
                 $result['expire'] = (isset($doc['endtime'])
@@ -1456,7 +1457,7 @@ class PAIA extends DAIA
             $responseArray = $this->paiaParseJsonAsArray($responseJson);
         } catch (ILSException $e) {
             $this->debug($e->getCode() . ':' . $e->getMessage());
-/* TODO: do not return empty array, this causes eventually confusion */
+            /* TODO: do not return empty array, this causes eventually confusion */
             return [];
         }
 
@@ -1586,8 +1587,8 @@ class PAIA extends DAIA
     {
         // TODO: make this more configurable
         if (
-            $patron['status'] == 0
-            && $patron['expires'] > date('Y-m-d')
+            isset($patron['status']) && $patron['status']  == 0
+            && isset($patron['expires']) && $patron['expires'] > date('Y-m-d')
             && in_array('write_items', $this->getSession()->scope)
         ) {
             return true;

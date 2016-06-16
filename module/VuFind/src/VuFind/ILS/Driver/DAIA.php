@@ -735,12 +735,16 @@ class DAIA extends AbstractBase implements
                 $result_item['callnumber'] = $this->getItemCallnumber($item);
                 // get location
                 $result_item['location'] = $this->getItemDepartment($item);
-                // get location id
+                // custom DAIA field
                 $result_item['locationid'] = $this->getItemDepartmentId($item);
                 // get location link
-                $result_item['locationhref'] = $this->getItemLocationLink($item);
-                // get location
+                $result_item['location_href'] = $this->getItemDepartmentLink($item);
+                // custom DAIA field
                 $result_item['storage'] = $this->getItemStorage($item);
+                // custom DAIA field
+                $result_item['storageid'] = $this->getItemStorageId($item);
+                // custom DAIA field
+                $result_item['storage_href'] = $this->getItemStorageLink($item);
                 // status and availability will be calculated in own function
                 $result_item = $this->getItemStatus($item) + $result_item;
                 // add result_item to the result array
@@ -1055,7 +1059,8 @@ class DAIA extends AbstractBase implements
     }
 
     /**
-     * Returns the value for "location" in VuFind getStatus/getHolding array
+     * Returns the value of item.department.content (e.g. to be used in VuFind
+     * getStatus/getHolding array as location)
      *
      * @param array $item Array with DAIA item data
      *
@@ -1070,7 +1075,8 @@ class DAIA extends AbstractBase implements
     }
 
     /**
-     * Returns the value for "location" id in VuFind getStatus/getHolding array
+     * Returns the value of item.department.id (e.g. to be used in VuFind
+     * getStatus/getHolding array as location)
      *
      * @param array $item Array with DAIA item data
      *
@@ -1083,7 +1089,22 @@ class DAIA extends AbstractBase implements
     }
 
     /**
-     * Returns the value for "location" in VuFind getStatus/getHolding array
+     * Returns the value of item.department.href (e.g. to be used in VuFind
+     * getStatus/getHolding array for linking the location)
+     *
+     * @param array $item Array with DAIA item data
+     *
+     * @return string
+     */
+    protected function getItemDepartmentLink($item)
+    {
+        return isset($item['department']['href'])
+            ? $item['department']['href'] : false;
+    }
+
+    /**
+     * Returns the value of item.storage.content (e.g. to be used in VuFind
+     * getStatus/getHolding array as location)
      *
      * @param array $item Array with DAIA item data
      *
@@ -1098,7 +1119,8 @@ class DAIA extends AbstractBase implements
     }
 
     /**
-     * Returns the value for "location" id in VuFind getStatus/getHolding array
+     * Returns the value of item.storage.id (e.g. to be used in VuFind
+     * getStatus/getHolding array as location)
      *
      * @param array $item Array with DAIA item data
      *
@@ -1108,6 +1130,20 @@ class DAIA extends AbstractBase implements
     {
         return isset($item['storage']) && isset($item['storage']['id'])
             ? $item['storage']['id'] : '';
+    }
+
+    /**
+     * Returns the value of item.storage.href (e.g. to be used in VuFind
+     * getStatus/getHolding array for linking the location)
+     *
+     * @param array $item Array with DAIA item data
+     *
+     * @return string
+     */
+    protected function getItemStorageLink($item)
+    {
+        return isset($item['storage']) && isset($item['storage']['href'])
+            ? $item['storage']['href'] : '';
     }
 
     /**
@@ -1197,19 +1233,6 @@ class DAIA extends AbstractBase implements
         return isset($item['label']) && !empty($item['label'])
             ? $item['label']
             : 'Unknown';
-    }
-
-    /**
-     * Returns the value for "location" href in VuFind getStatus/getHolding array
-     *
-     * @param array $item Array with DAIA item data
-     *
-     * @return string
-     */
-    protected function getItemLocationLink($item)
-    {
-        return isset($item['storage']['href'])
-            ? $item['storage']['href'] : false;
     }
 
     /**
